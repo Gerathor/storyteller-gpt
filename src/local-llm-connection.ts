@@ -1,9 +1,26 @@
 import axios from 'axios';
 
+export const truncateOutputAtStoppingString = (
+  output: string,
+  stoppingStrings: string[]
+): string => {
+  let earliestIndex = output.length;
+  let earliestString = '';
+  let truncatedOutput = output;
+
+  for (const stoppingString of stoppingStrings) {
+    const index = truncatedOutput.indexOf(stoppingString);
+    if (index !== -1) {
+      truncatedOutput = output.substring(0, index);
+    }
+  }
+  return truncatedOutput;
+};
+
 export async function proomptLocalAI(prompt: string) {
   const data = {
     prompt: prompt,
-    max_new_tokens: 250,
+    max_new_tokens: 2000,
     do_sample: true,
     temperature: 1.3,
     top_p: 0.1,
@@ -28,7 +45,7 @@ export async function proomptLocalAI(prompt: string) {
     truncation_length: 2048,
     ban_eos_token: false,
     skip_special_tokens: true,
-    stopping_strings: []
+    stopping_strings: '\nPlayer'
   };
   const options = {
     headers: { 'Content-Type': 'application/json' },
@@ -41,7 +58,8 @@ export async function proomptLocalAI(prompt: string) {
     if (response.data.results.length > 1) {
       console.log('RESPONSE WAS LONGER THAN 1', response.data.results);
     }
-    return response.data.results[0].text;
+    const responseText = response.data.results[0].text;
+    return responseText;
   } catch (error) {
     console.error(error);
   }

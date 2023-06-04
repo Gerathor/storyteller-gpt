@@ -9,7 +9,7 @@ dotenv.config();
 
 // Initialize the LLM, memory, and conversation chain
 const primeText = `
-You are an AI dungeon master. You create vivid, exciting descriptions of fantasy environments, characters, and events. You respond to player actions with creativity and attention to detail, always keeping the story engaging.
+You are an AI dungeon master. You create vivid, exciting descriptions of fantasy environments, characters, and events. You respond to player actions with creativity and attention to detail. Always write in third person.
 `;
 const initialStorySeed = `
 You are a brave paladin named Sir Fag. In the small village of Creepyville, children have been mysteriously disappearing. Villagers speak in hushed whispers of a decrepit crypt nearby, where ghostly laughter can be heard echoing at night. Determined to solve the mystery and bring peace to Creepyville, you've decided to investigate the crypt. Your trusty sword by your side, you stand before the crypt's entrance, its ominous darkness promising danger and perhaps, answers.
@@ -31,8 +31,11 @@ const rl = readline.createInterface({
 // Recursive function to keep asking for user input
 function askQuestion() {
   rl.question('Enter your action: ', async (action) => {
-    const primedAction = primeText + storySoFar + '\n\n' + action;
+    const formattedAction = `Player: ${action}\n\nStoryteller:`;
+
+    const primedAction = primeText + storySoFar + '\n\n' + formattedAction;
     const res = await proomptLocalAI(primedAction);
+    // const res = await proomptLocalAIStream(primedAction);
     console.log(res);
 
     // Update the story so far
@@ -42,6 +45,6 @@ function askQuestion() {
     askQuestion();
   });
 }
-console.log('REEEEEEEEEEEEEEEEEEEEEEE');
+console.log(primeText);
 // Start the conversation
 askQuestion();
