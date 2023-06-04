@@ -3,6 +3,8 @@ import { OpenAI } from 'langchain/llms/openai';
 import { BufferMemory } from 'langchain/memory';
 import { ConversationChain } from 'langchain/chains';
 import dotenv from 'dotenv';
+import { proomptLocalAI } from './local-llm-connection.js';
+
 dotenv.config();
 
 // Initialize the LLM, memory, and conversation chain
@@ -30,12 +32,12 @@ const rl = readline.createInterface({
 function askQuestion() {
   rl.question('Enter your action: ', async (action) => {
     const primedAction = primeText + storySoFar + '\n\n' + action;
-    const res = await chain.call({ input: primedAction });
+    const res = await proomptLocalAI(primedAction);
     console.log(res);
 
     // Update the story so far
     storySoFar += '\n\n' + 'You: ' + action + '\n\n' + 'DM: ' + res.response;
-    console.log('primedAction:', primedAction);
+    // console.log('primedAction:', primedAction);
     // Ask the next question
     askQuestion();
   });
