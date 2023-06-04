@@ -35,11 +35,11 @@ function askQuestion() {
 
     // Update the story so far
     storySoFar += '\n\n' + 'You: ' + action + '\n\n' + 'DM: ' + res.response;
-
+    console.log('primedAction:', primedAction);
     // Ask the next question
     askQuestion();
   });
 }
-
+console.log('REEEEEEEEEEEEEEEEEEEEEEE');
 // Start the conversation
 askQuestion();
