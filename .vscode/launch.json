@@ -9,6 +9,22 @@
       "preLaunchTask": "tsc: build - tsconfig.json",
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "console": "integratedTerminal"
+    },
+
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug TESTS",
+      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "preLaunchTask": "tsc: build - tsconfig.json",
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "windows": {
+        "program": "${workspaceFolder}/node_modules/jest/bin/jest.js"
+      },
+      "console": "integratedTerminal",
+      "sourceMaps": true,
+      "smartStep": true,
+      "resolveSourceMapLocations": ["${workspaceFolder}/**"]
     }
   ]
 }
