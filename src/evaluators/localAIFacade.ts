@@ -22,7 +22,7 @@ export class LocalAIFacade implements LLMFacade {
   async proomptLocalAI(prompt: string) {
     const data = {
       prompt: prompt,
-      max_new_tokens: 2000,
+      max_new_tokens: 500,
       do_sample: true,
       temperature: 1.3,
       top_p: 0.1,
