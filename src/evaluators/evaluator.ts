@@ -19,19 +19,22 @@ export class ObjectiveEvaluator {
   }
 
   async evaluateObjective(storySoFar: string) {
-    const query = `You are an AI assistant to an AI dungeon master. You need to evaluate your objective question and provide a clear and concise answer based on the answer format, based on the story so far. Do not elaborate on your reasoning.
+    const query = `Answer the the text in question with a clear YES/NO/MAYBE answer, followed by a percentage score with how confident you are in the answer.
   
+      Use the following format:
+      TEXT IN QUESTION: Text corpus about which the question is being asked
+      QUESTION: the input question you must answer
+      FINAL ANSWER: the final answer to the original input question, starting with YES, NO, or MAYBE followed by a percentage. Example: "YES - 100%"
+      
+      BEGIN!
+
       THE STORY SO FAR:
       ${storySoFar}
     
-      ANSWER FORMAT:
-      Answer in YES or NO, or if you think the answer is ambiguous, answer with a percentage between 0 and 100.
-  
       QUESTION:
       ${this.objective}
-    
-      ANSWER:
-      `;
+      
+      FINAL ANSWER:`;
 
     const response = await this.model.generateResponse(query);
     this.currentEvaluation = response;
