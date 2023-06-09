@@ -12,7 +12,7 @@ export class MyLocalAI extends BaseLLM {
     this.url = options.url || 'http://localhost:5000/api/v1/generate';
   }
 
-  async call(prompt: string) {
+  async call(prompt: string): Promise<string> {
     const data = {
       prompt: prompt,
       max_new_tokens: 500,
@@ -54,11 +54,17 @@ export class MyLocalAI extends BaseLLM {
         console.log('RESPONSE WAS LONGER THAN 1', response.data.results);
       }
       const responseText = response.data.results[0].text;
+
+      //typeguard for string
+      if (typeof responseText !== 'string') {
+        throw new Error('Response was not a string!');
+      }
       // The call method needs to return a Promise<string>, so we just return responseText directly
       return responseText;
     } catch (error) {
       console.error(error);
     }
+    return '';
   }
 
   async _generate(prompts: string[]) {
