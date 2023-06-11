@@ -52,10 +52,11 @@ export class TreeOfThought {
   }
 
   private async generateSubQuestions(question: string): Promise<string> {
-    const subQuestionsPrompt = `Given the question "${question}", what are some related sub-questions that we could explore? Separate each sub-question with a SINGLE newline. ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
+    const subQuestionsPrompt = `Given the question "${question}", what are some related sub-plots that we could explore?
+    Separate each sub-question with a SINGLE newline. ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
     return this.client.call(subQuestionsPrompt);
   }
-
+  
   private async constructDecisionTreeQuestionsRecursively(
     question: string,
     depth: number
@@ -84,7 +85,24 @@ export class TreeOfThought {
       children.push(child);
     }
 
-    return { question: question, answer: '', children: children };
+    // Evaluate and prune children nodes
+    const evaluatedNode = await evaluateChildrenScoresIfUndefined(this.client, {
+      question: question,
+      answer: '',
+      children: children
+    });
+
+    evaluatedNode.children = evaluatedNode.children.filter((child) => {
+      const shouldKeep = child.evaluationScore && child.evaluationScore >= 5;
+      if (!shouldKeep) {
+        console.log(
+          `PRUNED: " Question: ${child.question} | Answer: ${child.answer}"`
+        );
+      }
+      return shouldKeep;
+    });
+
+    return evaluatedNode;
   }
 
   private async forwardPass(node: ThoughtNode): Promise<void> {
