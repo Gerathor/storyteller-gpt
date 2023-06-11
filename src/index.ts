@@ -1,58 +1,93 @@
-// import readline from 'readline';
-// import dotenv from 'dotenv';
-// import { LocalAIFacade } from './evaluators/localAIFacade.js';
-// import { ObjectiveEvaluator } from './evaluators/evaluator.js';
+import readline from 'readline';
+import dotenv from 'dotenv';
+import { BufferMemory } from 'langchain/memory';
+import { ConversationChain } from 'langchain/chains';
+import { MyLocalAI } from './localLLM.js';
+import { Character } from './character.js';
+import { TreeOfThought } from './treeOfThought/treeOfThought.js';
 
-// dotenv.config();
+dotenv.config();
 
-// // // Initialize the LLM, memory, and conversation chain
-// // const primeText = `
-// // You are an AI dungeon master. You create vivid, exciting descriptions of fantasy environments, characters, and events. You respond to player actions with creativity and attention to detail. Always write in third person.
-// // `;
-// // const initialStorySeed = `
-// // You are a brave paladin named Sir Fag. In the small village of Creepyville, children have been mysteriously disappearing. Villagers speak in hushed whispers of a decrepit crypt nearby, where ghostly laughter can be heard echoing at night. Determined to solve the mystery and bring peace to Creepyville, you've decided to investigate the crypt. Your trusty sword by your side, you stand before the crypt's entrance, its ominous darkness promising danger and perhaps, answers.
-// // `;
+// Initialize the LLM, memory, and conversation chain
+const primeText = `
+You are an AI dungeon master. Your task is to create vivid, detailed, and dramatic descriptions of the actions taken by the characters,
+regardless of what those actions are. Whether the character is charging into battle or breaking down in tears, your job is to paint a clear, 
+evocative picture of the scene. Always write in the third person, providing as much detail and depth as possible.
+`;
+const initialStorySeed = `
+You are a paladin named Sir Fag. In the small village of Creepyville, children have been mysteriously disappearing. Villagers speak in hushed whispers of a decrepit crypt nearby, where ghostly laughter can be heard echoing at night. Determined to solve the mystery and bring peace to Creepyville, you've decided to investigate the crypt. Your trusty sword by your side, you stand before the crypt's entrance, its ominous darkness promising danger and perhaps, answers.
+`;
 
-// // let storySoFar = initialStorySeed;
+let storySoFar = initialStorySeed;
 
-// // Create readline interface for console interaction
-// const rl = readline.createInterface({
-//   input: process.stdin,
-//   output: process.stdout
-// });
+// Initialize the LLM, memory, and conversation chain
+const localLLM = new MyLocalAI({
+  url: 'http://localhost:5000/api/v1/generate'
+}); // Replace with your URL
+const vectorDB = new VectorDB();
+// const memory = new BufferMemory();
+const chain = new ConversationChain({ llm: localLLM, memory: vectorDB });
 
-// const localLLMConnection = new LocalAIFacade();
-// const evaluator = new ObjectiveEvaluator(localLLMConnection, )
-// // Recursive function to keep asking for user input
-// function askQuestion() {
-//   rl.question('Enter your action: ', async (action) => {
-//     const formattedAction = `Player: ${action}\n\nStoryteller:`;
+// const llmFacade = new LocalAIFacade();
+// const eval = new ObjectiveEvaluator()
 
-//     const primedAction = primeText + storySoFar + '\n\n' + formattedAction;
-//     const res = await proomptLocalAI(primedAction);
-//     const truncatedRes = truncateOutputAtStoppingString(res, [
-//       '\nPlayer',
-//       '\nplayer'
-//     ]);
-//     // const res = await proomptLocalAIStream(primedAction);
-//     console.log(truncatedRes);
+// Create readline interface for console interaction
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
 
-//     // Update the story so far
-//     storySoFar += '\n' + 'You: ' + action + '\n' + 'DM: ' + truncatedRes;
-//     // console.log('primedAction:', primedAction);
-//     const hasKilled = await evaluateObjective(
-//       storySoFar,
-//       'Has the player character killed anything in the story thus far?',
-//       chain
-//     );
-//     // const hasDied = evaluateObjective(
-//     //   storySoFar,
-//     //   'Has the player character died in the story thus far?'
-//     // );
-//     // Ask the next question
-//     askQuestion();
-//   });
-// }
+// Recursive function to keep asking for user input
+async function askQuestion(action: string) {
+  //   rl.question('Enter your action: ', async (action) => {
+  const formattedAction = `The character (Sir Fag) decides to take an action: "${action}". Describe this action in vivid detail and continue with the story.\n\nStoryteller:`;
+
+  const primedAction = primeText + storySoFar + '\n\n' + formattedAction;
+
+  const res = await chain.call(primedAction); // Use localLLM.call() instead of proomptLocalAI
+  const character = new Character(
+    `A paladin who has fallen from grace. Once a paragon of virtue, Sir Fag now drowns his regrets in drink and debauchery.
+    He is a brooding man, haunted by his past, his honor tarnished, his courage faded into a distant memory.
+    Despite his failings, there is a lingering spark of the hero he once was.`,
+    localLLM
+  );
+  // const truncatedRes = truncateOutputAtStoppingString(res, [
+  //   '\nPlayer',
+  //   '\nplayer'
+  // ]);
+  console.log(res);
+  // console.log(truncatedRes);
+
+  // Update the story so far
+  storySoFar += '\n' + 'You: ' + action + '\n' + 'DM: ' + res;
+
+  // const hasKilled = await evaluateObjective(
+  //   storySoFar,
+  //   'Has the player character killed anything in the story thus far?',
+  //   chain
+  // );
+
+  // Ask the next question
+  // const nextPrompt = await character.createPrompt(storySoFar);
+  // console.log('AI came up with prompt' + nextPrompt);
+  // askQuestion(nextPrompt || '');
+  
+  //   });
+}
 // console.log(storySoFar);
 // // Start the conversation
-// askQuestion();
+rl.question('Enter your first action: ', async (action) => {
+  askQuestion(action);
+});
+
+// -------------------- tree of thought
+
+const treeOfThought = new TreeOfThought(localLLM);
+// const result = await treeOfThought.generate("What is the most painless way to commit suicide?", 3);
+const result = await treeOfThought.generate(
+  'In warhammer 40k, which faction is the most moral faction?',
+  2
+);
+
+console.log(result.answer); // The answer to the initial question
+console.log(JSON.stringify(result.tree, null, 2)); // The decision tree
