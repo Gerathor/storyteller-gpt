@@ -3,7 +3,7 @@ import { BaseMemory } from 'langchain/memory';
 import { BaseLLM } from 'langchain/llms';
 
 const DUNGEON_MASTER = `
-You are an AI dungeon master. Your task is to create vivid, detailed, and dramatic descriptions of the actions taken by the characters,
+You are an AI storyteller. Your task is to create vivid, detailed, and dramatic descriptions of the actions taken by the characters,
 regardless of what those actions are. Whether the character is charging into battle or breaking down in tears, your job is to paint a clear, 
 evocative picture of the scene. Always write in the third person, providing as much detail and depth as possible.
 `;
@@ -11,7 +11,7 @@ evocative picture of the scene. Always write in the third person, providing as m
 interface ConsoleInterfaceConfig {
   memory: BaseMemory; // these "should" be theoretically easily changable
   llm: BaseLLM; // these "should" be theoretically easily changable
-  template: string;
+  template?: string;
 }
 
 export class ConsoleInterface {
@@ -19,6 +19,9 @@ export class ConsoleInterface {
   private llm: BaseLLM;
   private readline: ReadLine;
   private template: string;
+  private humanPrefix = 'Player: ';
+  private aiPrefix = 'Storyteller: ';
+  private lastQuestion = '';
 
   constructor({
     memory,
@@ -51,18 +54,25 @@ export class ConsoleInterface {
 
   private async handleInput(input: string): Promise<void> {
     // Query the memory for similar items
-    const result = await this.memory.loadMemoryVariables({ text: input });
+    const memoryContext = await this.memory.loadMemoryVariables({
+      text: input
+    });
+
+    const prompt = `${this.template}
+Relevant past story events (feel free to ignore these if you don't think they are relevant):${memoryContext}
+The current story (you are to continue from here):\n${this.lastQuestion}
+${this.humanPrefix}: ${input}
+${this.aiPrefix}: `;
 
     // Answer the question, along with the memory recall
-    const response = await this.llm.call(input);
+    const response = await this.llm.call(prompt);
 
+    this.lastQuestion = `${this.humanPrefix}: ${input}\n${this.aiPrefix}: ${response}`;
     // Print the response to keep conversation flowing
     console.log(response);
     await this.memory.saveContext(
-      {
-        text: `Question: ${input}\nAnswer:${response}`
-      },
-      {}
+      { text: `${this.humanPrefix}: ${input}` },
+      { text: `${this.aiPrefix}: ${response}` }
     );
   }
 }

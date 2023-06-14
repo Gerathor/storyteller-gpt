@@ -11,11 +11,18 @@ async function main() {
   const vectorDBManager = new FaissManager();
   const llm = new MyLocalAI({ url: 'http://localhost:5000/api/v1/generate' });
 
+  // Save the story intro to memory
+  await vectorDBManager.saveContext({
+    text: `Our story begins in the small village of Creepyville, where children have been mysteriously disappearing.
+Villagers speak in hushed whispers of a decrepit crypt nearby, ghostly laughter can be heard echoing at night.
+Determined to solve the mystery and bring peace to Creepyville, the player - called Sir Fag - has decided to investigate the crypt.
+With his trusty sword by his side, he stands before the crypt's entrance, its ominous darkness promising danger and perhaps, answers.`
+  });
+
   // Create a new ConsoleInterface instance with the memory manager and AI facade
   const consoleInterface = new ConsoleInterface({
     memory: vectorDBManager,
-    llm: llm,
-    template: 'Your custom template here'
+    llm: llm
   });
 
   // Start the console interface

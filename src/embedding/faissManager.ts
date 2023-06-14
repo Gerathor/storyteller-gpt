@@ -1,12 +1,7 @@
-import path from 'path';
 import { BaseMemory } from 'langchain/memory';
 import axios from 'axios';
 import faiss from 'faiss-node';
 import { InputValues } from 'langchain/schema';
-
-// Setup Faiss
-const localIndexPath = path.resolve(process.cwd(), 'src', 'embedding', 'index');
-console.log('Initializing Faiss Index at: ', localIndexPath);
 
 interface VectorQueryResult {
   texts: string[];
@@ -27,37 +22,46 @@ class FaissManager extends BaseMemory {
     return ['text'];
   }
 
-  async loadMemoryVariables(values: InputValues): Promise<VectorQueryResult> {
-    const embeddings = await this.getEmbedding(values.text);
+  async loadMemoryVariables(
+    values: InputValues,
+    numberOfResults = 1
+  ): Promise<VectorQueryResult> {
+    const embeddings = await this.getEmbeddings([values.text]);
 
     // Check if the index is empty
-    if (this.index.ntotal() === 0) {
-      return { texts: [], distances: [] };
+    if (this.index.ntotal() < numberOfResults) {
+      while (this.index.ntotal() < numberOfResults) {
+        numberOfResults = numberOfResults - 1;
+        if (numberOfResults === 0) {
+          return { texts: [], distances: [] };
+        }
+        // if while loop breaks it means that numberOfResults is above 0 but below ntotal
+      }
     }
-    const { distances, labels } = this.index.search(embeddings, 1);
+    const { distances, labels } = this.index.search(
+      embeddings[0],
+      numberOfResults
+    );
     const texts = labels.map((id) => this.origTexts[id]);
 
     return { texts, distances };
   }
 
-  async saveContext(inputValues: InputValues): Promise<void> {
-    const embeddings = await this.getEmbedding(inputValues.text);
-    this.index.add(embeddings);
-    this.origTexts.push(inputValues.text);
+  async saveContext(
+    inputValues: InputValues,
+    outputValues?: InputValues
+  ): Promise<void> {
+    // add text to array if not undefined
+    const getEmbeddingsFor = [inputValues.text, outputValues?.text].filter(
+      Boolean
+    );
+    const embeddings = await this.getEmbeddings(getEmbeddingsFor);
+    embeddings.forEach((embedding) => {
+      this.index.add(embedding);
+      this.origTexts.push(inputValues.text);
+    });
   }
 
-  private async getEmbedding(text: string): Promise<number[]> {
-    const response = await axios.post('http://localhost:6000/embed', { text });
-    if (!Array.isArray(response.data) || response.data.length !== 1) {
-      throw new Error(
-        'Unexpected response from the embedding service: ' +
-          JSON.stringify(response.data)
-      );
-    }
-    return response.data[0];
-  }
-
-  // haven't tested this yet
   private async getEmbeddings(text: string[]): Promise<number[][]> {
     const response = await axios.post('http://localhost:6000/embed', { text });
     if (
@@ -69,7 +73,7 @@ class FaissManager extends BaseMemory {
           JSON.stringify(response.data)
       );
     }
-    return response.data;
+    return response.data; // I really don't know why this is necessary
   }
 }
 
