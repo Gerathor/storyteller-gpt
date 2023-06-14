@@ -1,10 +1,12 @@
 import readline from 'readline';
 import dotenv from 'dotenv';
-import { BufferMemory } from 'langchain/memory';
 import { ConversationChain } from 'langchain/chains';
 import { MyLocalAI } from './localLLM.js';
 import { Character } from './character.js';
 import { TreeOfThought } from './treeOfThought/treeOfThought.js';
+import VectraManager from './embedding/vectraManager.js';
+import { SystemMessagePromptTemplate, ChatPromptTemplate, HumanMessagePromptTemplate } from "langchain/prompts";
+import FaissManager from './embedding/faissManager.js';
 
 dotenv.config();
 
@@ -19,15 +21,43 @@ You are a paladin named Sir Fag. In the small village of Creepyville, children h
 `;
 
 let storySoFar = initialStorySeed;
-
 // Initialize the LLM, memory, and conversation chain
+const vectorDBManager = new FaissManager();
+// await vectorDBManager.addItem('dog');
+// await vectorDBManager.addItem('bicycle');
+// await vectorDBManager.addItem('banana');
+const results = await vectorDBManager.queryItems('vehicle', 3);
+console.log(results);
 const localLLM = new MyLocalAI({
   url: 'http://localhost:5000/api/v1/generate'
 }); // Replace with your URL
-const vectorDB = new VectorDB();
-// const memory = new BufferMemory();
-const chain = new ConversationChain({ llm: localLLM, memory: vectorDB });
 
+// Defining the new behavior for the AI assistant
+const systemPrompt = SystemMessagePromptTemplate.fromTemplate(
+  "You are a witty, brutally honest, and incredibly politically incorrect assistant. Question: {userPrompt} Answer:"
+);
+
+// Constructing the ChatPromptTemplate with the new behavior
+const chatPrompt = ChatPromptTemplate.fromPromptMessages([
+  systemPrompt,
+  HumanMessagePromptTemplate.fromTemplate("{text}"),
+]);
+
+const chain = new ConversationChain({ 
+  llm: localLLM,
+   memory: vectorDBManager, 
+   prompt: chatPrompt });
+
+// Mock user input
+let mock_input = 'What is a moon cricket?';
+
+// Passing the mock user input to the LLMChain
+const response = await chain.call({
+  userPrompt: mock_input,
+  text: mock_input,
+});
+
+   console.log(response)
 // const llmFacade = new LocalAIFacade();
 // const eval = new ObjectiveEvaluator()
 
@@ -44,7 +74,7 @@ async function askQuestion(action: string) {
 
   const primedAction = primeText + storySoFar + '\n\n' + formattedAction;
 
-  const res = await chain.call(primedAction); // Use localLLM.call() instead of proomptLocalAI
+  const res = await chain.call({prompt: primedAction}); // Use localLLM.call() instead of proomptLocalAI
   const character = new Character(
     `A paladin who has fallen from grace. Once a paragon of virtue, Sir Fag now drowns his regrets in drink and debauchery.
     He is a brooding man, haunted by his past, his honor tarnished, his courage faded into a distant memory.
