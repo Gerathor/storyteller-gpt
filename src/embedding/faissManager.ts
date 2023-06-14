@@ -1,8 +1,8 @@
 import path from 'path';
 import { BaseMemory } from 'langchain/memory';
-import { InputValues } from 'langchain/schema';
 import axios from 'axios';
 import faiss from 'faiss-node';
+import { InputValues } from 'langchain/schema';
 
 // Setup Faiss
 const localIndexPath = path.resolve(process.cwd(), 'src', 'embedding', 'index');
@@ -14,48 +14,36 @@ interface VectorQueryResult {
 }
 
 class FaissManager extends BaseMemory {
-  private index!: faiss.IndexFlatL2; // Use an appropriate index type
-  origTexts: string[];
+  private index!: faiss.IndexFlatL2;
+  private origTexts: string[];
+
   constructor() {
     super();
     this.index = new faiss.IndexFlatL2(768); // Initialize index with dimension size
     this.origTexts = []; // Array to store the original text strings
   }
 
-  async addItem(text: string) {
-    const embeddings = await this.getEmbedding(text);
-    this.index.add(embeddings);
-    this.origTexts.push(text);
+  get memoryKeys(): string[] {
+    return ['text'];
   }
 
-  async queryItems(text: string, topK: number): Promise<VectorQueryResult> {
-    const embeddings = await this.getEmbedding(text);
-    const { distances, labels } = this.index.search(embeddings, topK);
-    const texts = labels.map((id) => this.origTexts[id]); // Look up the original text strings
+  async loadMemoryVariables(values: InputValues): Promise<VectorQueryResult> {
+    const embeddings = await this.getEmbedding(values.text);
 
-    // You'll need to map labels to items
+    // Check if the index is empty
+    if (this.index.ntotal() === 0) {
+      return { texts: [], distances: [] };
+    }
+    const { distances, labels } = this.index.search(embeddings, 1);
+    const texts = labels.map((id) => this.origTexts[id]);
+
     return { texts, distances };
   }
 
-  getIndex() {
-    return this.index;
-  }
-
-  // keys that your memory implementation uses to store data
-  get memoryKeys(): string[] {
-    return ['text']; // replace with the actual keys you'll be using in the memory
-  }
-
-  async loadMemoryVariables(values: InputValues): Promise<Record<string, any>> {
-    // Assuming `index` is a key in values, adjust accordingly
-    return { text: values['text'] };
-  }
-
-  async saveContext(
-    inputValues: InputValues,
-    outputValues: Record<string, any>
-  ): Promise<void> {
-    // Implement this based on how you want to save context in your application
+  async saveContext(inputValues: InputValues): Promise<void> {
+    const embeddings = await this.getEmbedding(inputValues.text);
+    this.index.add(embeddings);
+    this.origTexts.push(inputValues.text);
   }
 
   private async getEmbedding(text: string): Promise<number[]> {
@@ -68,8 +56,9 @@ class FaissManager extends BaseMemory {
     }
     return response.data[0];
   }
-  // Retrieve embeddings from the Flask microservice
-  private async getEmbeddings(text: string): Promise<number[][]> {
+
+  // haven't tested this yet
+  private async getEmbeddings(text: string[]): Promise<number[][]> {
     const response = await axios.post('http://localhost:6000/embed', { text });
     if (
       !Array.isArray(response.data) ||

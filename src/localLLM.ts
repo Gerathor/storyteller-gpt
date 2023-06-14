@@ -67,22 +67,21 @@ export class MyLocalAI extends BaseLLM {
     return '';
   }
 
-  async _generate(prompts: string[]) {
+  async _generate(prompts: string[]): Promise<{
+    generations: Generation[][];
+  }> {
     // _generate needs to return a Promise<LLMResult>, so we need to adjust this method to match
     // The exact structure of LLMResult would depend on the langchain/llms library,
     // but it will likely include the generated text and possibly some metadata
-    let generations = [];
-    for (let prompt of prompts) {
-      let generatedText = await this.call(prompt);
+    const generations = [];
+    for (const prompt of prompts) {
+      const generatedText = await this.call(prompt);
       // Assuming LLMResult is a structure like { generations: [{generated: string}] }
       const generation: Generation = {
         text: generatedText
       };
       generations.push([generation]);
     }
-    const result: LLMResult = {
-      generations
-    };
     return { generations };
   }
 

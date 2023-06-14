@@ -56,7 +56,7 @@ export class TreeOfThought {
     Separate each sub-question with a SINGLE newline. ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
     return this.client.call(subQuestionsPrompt);
   }
-  
+
   private async constructDecisionTreeQuestionsRecursively(
     question: string,
     depth: number
@@ -106,7 +106,7 @@ export class TreeOfThought {
   }
 
   private async forwardPass(node: ThoughtNode): Promise<void> {
-    for (let child of node.children) {
+    for (const child of node.children) {
       await this.forwardPass(child);
     }
 
@@ -119,7 +119,7 @@ export class TreeOfThought {
   }
   private async backwardPass(node: ThoughtNode): Promise<void> {
     // Generate new answers to the sub-questions given the answer to the initial question
-    for (let child of node.children) {
+    for (const child of node.children) {
       const newAnswer = await this.answerSubquestionBasedOnParentAnswer(
         node.question,
         node.answer,
@@ -132,7 +132,7 @@ export class TreeOfThought {
 
   private async iterativeRefinement(
     node: ThoughtNode,
-    maxPasses: number = 3
+    maxPasses = 3
   ): Promise<void> {
     let oldAnswer;
     let counter = 0;
@@ -157,8 +157,8 @@ export class TreeOfThought {
 
   public async generate(
     initialQuestion: string,
-    depth: number = 3,
-    filenameForCheckpoint: string = 'checkpoint'
+    depth = 3,
+    filenameForCheckpoint = 'checkpoint'
   ): Promise<{ answer: string; tree: ThoughtNode }> {
     const tree = await this.constructDecisionTreeQuestionsRecursively(
       initialQuestion,
