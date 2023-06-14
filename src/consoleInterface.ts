@@ -59,7 +59,7 @@ export class ConsoleInterface {
     });
 
     const prompt = `${this.template}
-Relevant past story events (feel free to ignore these if you don't think they are relevant):${memoryContext}
+Relevant past story events (feel free to ignore these if you don't think they are relevant):\n${memoryContext.texts}
 The current story (you are to continue from here):\n${this.lastQuestion}
 ${this.humanPrefix}: ${input}
 ${this.aiPrefix}: `;
