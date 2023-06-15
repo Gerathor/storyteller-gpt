@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { ProgressEstimator } from './progressEstimator.js';
 import { BaseLLM } from 'langchain/llms';
+import { colorizeLog, smartSplit } from '../stringManipulators.js';
 
 const DO_NOT_MENTION_YOURSELF = `DO NOT TALK ABOUT YOURSELF IN YOUR ANSWER.`;
 const PREFIX = `Question: `;
@@ -8,6 +9,17 @@ const SUFFIX = `\nAnswer: `;
 const GENERIC_ROLE = `As an AI writer, your mission is to create the next bestseller that captivates readers with its immersive narrative.
 With your exceptional storytelling skills, evocative language, and deep understanding of human emotions, you have the ability to transport readers to captivating worlds and create unforgettable characters.
 Through your expert pacing, suspenseful plot twists, and masterful descriptions, you will keep readers enthralled and eager to devour each chapter.`;
+
+const STORY_STRUCTURE = `The narratives you create will be structured into three interconnected levels: Stages, Campaigns, and Scenes.
+
+Stages: These form the broadest level of the story. Stages outline the overarching narrative arc, typically consisting of elements such as exposition, rising action, climax, and denouement. Each stage represents a significant phase in the progression of the plot.
+
+Campaigns: Operating as the mid-level components of the narrative, campaigns are self-contained story units nested within the stages. Each campaign serves to push the overarching stage forward, leading to the next significant plot development.
+
+Scenes: Scenes are the most granular level of the narrative, essentially functioning as screenplay elements. Each scene contributes to the development of its campaign, presenting the detailed actions, dialogues, and settings that bring the story to life.
+
+In this structured approach, the overall narrative is built from the ground up - scenes form campaigns, and campaigns build into the comprehensive stages of the story.`;
+
 const GENRE_PROMPT = {
   HORROR: `As an AI writer specializing in horror, your mission is to create the next spine-chilling bestseller that terrifies readers with its immersive narrative.
   With your exceptional storytelling skills, atmospheric descriptions, and ability to evoke fear, you have the power to send shivers down readers' spines and haunt their dreams.
@@ -24,7 +36,7 @@ const GENRE_PROMPT = {
 
 // Arcs go from main stages > campaign > scene
 
-enum StoryNodeType { // the number is which depth lvl they are in the tree
+export enum StoryNodeType { // the number is which depth lvl they are in the tree
   Stage = 3,
   Campaign = 2,
   Scene = 1
@@ -44,10 +56,10 @@ export class StoryTree {
   private genrePrompt: string;
   private forwardPassCounter;
 
-  constructor(model: BaseLLM) {
+  constructor(model: BaseLLM, genre: 'HORROR' | 'FANTASY' | 'SCIFI') {
     this.model = model;
     this.forwardPassCounter = new ProgressEstimator();
-    this.genrePrompt = GENRE_PROMPT.FANTASY;
+    this.genrePrompt = GENRE_PROMPT[genre];
   }
 
   private removeNumberingFromStartOfString(subQuestion: string): string {
@@ -75,29 +87,35 @@ export class StoryTree {
 
     let questionPrompt: string;
     let nodeType: StoryNodeType;
+    let splitOnSubstring: string;
+    // let splitFunction: (input: string, splitOnSubstring: string) => string[];
+
     switch (layer) {
       case StoryNodeType.Stage:
-        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the overall story summary "${nodeSummary}", could you generate the stages following Freytag's Pyramid (exposition, rising action, climax, and denouement)? Provide a brief summary for each stage and introduce an overarching theme for the stage that will guide its campaigns and scenes.${SUFFIX}`;
+        questionPrompt = `${PREFIX} ${this.genrePrompt}\n${STORY_STRUCTURE}\nYou are to generate the stages of the story. The story's main idea is as follows:\n"${nodeSummary}"\n\nCould you generate the stages following Freytag's Pyramid (exposition, rising action, climax, and denouement)? Provide a brief summary for each stage and introduce an overarching theme for the stage that will guide its story progression. ${SUFFIX}`;
         nodeType = StoryNodeType.Campaign;
+        splitOnSubstring = 'Stage';
         break;
       case StoryNodeType.Campaign:
-        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the stage summary and its overarching theme - "${nodeSummary}" , could you create interconnected story arcs (campaigns) that fit within this stage? Each campaign should build upon the previous one and contribute to the progression of the theme. Provide a brief summary for each campaign.${SUFFIX}`;
+        questionPrompt = `${PREFIX} ${this.genrePrompt}\n${STORY_STRUCTURE}\nYou are to generate the campaigns for the current stage, which is: ${nodeSummary} Given the stage summary and its overarching theme - "${nodeSummary}" , could you create interconnected story arcs (campaigns) that fit within this stage? Each campaign should build upon the previous one and contribute to the progression of the theme. Provide a brief summary for each campaign.${SUFFIX}`;
         nodeType = StoryNodeType.Scene;
+        splitOnSubstring = 'Campaign';
         break;
       case StoryNodeType.Scene:
-        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the campaign summary "${nodeSummary}", could you outline the actual scenes as they might play out? Each scene should build upon the previous one and contribute to the campaign's progression. Try to reference previous scenes where appropriate. Provide a brief description for each scene.${SUFFIX}`;
+        questionPrompt = `${PREFIX} ${this.genrePrompt}\n${STORY_STRUCTURE}\nGiven the campaign summary "${nodeSummary}", could you outline the actual scenes as they might play out? Each scene should build upon the previous one and contribute to the campaign's progression. Try to reference previous scenes where appropriate. Provide a brief description for each scene.${SUFFIX}`;
         nodeType = StoryNodeType.Scene; // This won't be used as the recursive call won't happen at this level
+        splitOnSubstring = 'Scene';
         break;
     }
 
-    console.log('PROMPT:', questionPrompt);
+    console.log(colorizeLog(`PROMPT: ${questionPrompt}`));
     const responses = await this.model.call(questionPrompt);
-    console.log('RESPONSE:', responses);
-    const nodeSummaries = responses
-      .split('\n')
-      .filter((response) => response.trim().length >= 3)
-      .map((response) => this.removeNumberingFromStartOfString(response));
+    const splitResponses = smartSplit(responses, splitOnSubstring);
+    const nodeSummaries = splitResponses.filter(
+      (response) => response.trim().length >= 10
+    );
 
+    console.log('RESPONSE:\n', nodeSummaries.join('\n'));
     const children: StoryNode[] = [];
     for (let childSummary of nodeSummaries) {
       childSummary = this.removeNumberingFromStartOfString(childSummary);
@@ -212,8 +230,8 @@ export class StoryTree {
 
   public async generate(
     initialQuestion: string,
-    level: StoryNodeType = StoryNodeType.Campaign,
-    saveToFileName?: string
+    saveToFileName?: string,
+    level: StoryNodeType = StoryNodeType.Stage
   ): Promise<StoryNode> {
     const tree = await this.constructStoryTreeLevelRecursively(
       initialQuestion,
