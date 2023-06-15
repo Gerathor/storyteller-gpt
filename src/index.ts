@@ -10,7 +10,8 @@ dotenv.config();
 const llm = new MyLocalAI({ url: 'http://localhost:5000/api/v1/generate' });
 const storyTree = new StoryTree(llm);
 storyTree.generate(
-  'A brief yet tragic story about the escapades of Sir Fag, a fallen from grace alcoholic paladin that still keeps trying to do the right thing despite not knowing what it is and repeatedly failing to achieve anything anyone would consider to be a good outcome'
+  'A brief yet tragic story about the escapades of Sir Fag, a fallen from grace alcoholic paladin that still keeps trying to do the right thing despite not knowing what it is and repeatedly failing to achieve anything anyone would consider to be a good outcome',
+  'campaign'
 );
 
 // async function main() {

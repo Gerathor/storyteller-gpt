@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { ProgressEstimator } from './progressEstimator.js';
 import { BaseLLM } from 'langchain/llms';
 
@@ -101,15 +102,15 @@ export class StoryTree {
     let nodeType: StoryNodeType;
     switch (layer) {
       case StoryNodeType.Stage:
-        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the overall story summary "${nodeSummary}", could you generate the stages following Freytag's Pyramid (exposition, rising action, climax, and denouement)? Provide a brief summary for each stage.${SUFFIX}`;
+        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the overall story summary "${nodeSummary}", could you generate the stages following Freytag's Pyramid (exposition, rising action, climax, and denouement)? Provide a brief summary for each stage and introduce an overarching theme for the stage that will guide its campaigns and scenes.${SUFFIX}`;
         nodeType = StoryNodeType.Campaign;
         break;
       case StoryNodeType.Campaign:
-        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the stage summary "${nodeSummary}", could you create smaller story arcs (campaigns) that fit within this stage? Provide a brief summary for each campaign.${SUFFIX}`;
+        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the stage summary and its overarching theme - "${nodeSummary}" , could you create interconnected story arcs (campaigns) that fit within this stage? Each campaign should build upon the previous one and contribute to the progression of the theme. Provide a brief summary for each campaign.${SUFFIX}`;
         nodeType = StoryNodeType.Scene;
         break;
       case StoryNodeType.Scene:
-        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the campaign summary "${nodeSummary}", could you outline the actual scenes as they might play out? Provide a brief description for each scene.${SUFFIX}`;
+        questionPrompt = `${PREFIX} ${this.genrePrompt}\nGiven the campaign summary "${nodeSummary}", could you outline the actual scenes as they might play out? Each scene should build upon the previous one and contribute to the campaign's progression. Try to reference previous scenes where appropriate. Provide a brief description for each scene.${SUFFIX}`;
         nodeType = StoryNodeType.Scene; // This won't be used as the recursive call won't happen at this level
         break;
     }
@@ -207,9 +208,9 @@ export class StoryTree {
   ): Promise<StoryNode> {
     const tree = await this.constructStoryTreeLevelRecursively(
       initialQuestion,
-      StoryNodeType.Stage
+      StoryNodeType.Campaign
     );
-    // fs.writeFileSync(`${filenameForCheckpoint}.json`, JSON.stringify(tree));
+    fs.writeFileSync(`${filenameForCheckpoint}.json`, JSON.stringify(tree));
     // import tree from checkpoint.json
 
     // let evalTestTree = JSON.parse(
