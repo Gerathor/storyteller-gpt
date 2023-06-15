@@ -38,7 +38,7 @@ ${childrenToEvaluate
       Scores:\n${LEADING_ANSWER}`;
 
   const scoresString = await client.call(scoringPrompt);
-  let scores = parseScores(LEADING_ANSWER + scoresString);
+  const scores = parseScores(LEADING_ANSWER + scoresString);
 
   // Assign scores to the appropriate nodes
   for (let i = 0; i < childrenToEvaluate.length; i++) {

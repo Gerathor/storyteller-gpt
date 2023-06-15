@@ -1,6 +1,7 @@
 import fs from 'fs';
 import { ProgressEstimator } from './progressEstimator.js';
 import { BaseLLM } from 'langchain/llms';
+import { evaluateAllNodeSummaries } from './storyEvaluator.js';
 
 const DO_NOT_MENTION_SUBQUESTIONS = `Omit usage of the word 'sub-questions' in your answer.`;
 const PREFIX = `Question: `;
@@ -30,12 +31,13 @@ enum StoryNodeType { // the number is which depth lvl they are in the tree
   Scene = 1
 }
 
-interface StoryNode {
+export interface StoryNode {
   layerLevel: StoryNodeType; // stage, campaign, or scene name
   shortSummary: string;
   children: StoryNode[];
   hasTranspired: boolean;
-  evaluationScore?: number; // what should we evaluate?
+  evalScore?: number; // what should we evaluate?
+  evalReasoning?: string;
 }
 
 export class StoryTree {
@@ -67,17 +69,6 @@ export class StoryTree {
     const questionPrompt = `Given the question "${parentQuestion}" and its answer "${parentAnswer}", how would you refine or update the answer to the related sub-question "${subQuestion}"? ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
     return this.model.call(questionPrompt);
   }
-
-  //   private async summarizeChildren(
-  //     parentQuestion: string,
-  //     children: StoryNode[]
-  //   ): Promise<string> {
-  //     const subQuestionsAndTheirAnswers = children
-  //       .map((child) => `${child.question}: ${child.answer}`)
-  //       .join('\n');
-  //     const questionPrompt = `Given the question: ${parentQuestion}, and the following related sub-questions and their answers:\n${subQuestionsAndTheirAnswers}\n\nProvide a concise summary of all of the sub-questions and their answers. ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
-  //     return this.model.call(questionPrompt);
-  //   }
 
   //   private async generateChildren(question: string): Promise<string> {
   //     const prompt = `${ROLE}Given the question "${question}", what are some related sub-plots that we could explore?
@@ -149,21 +140,33 @@ export class StoryTree {
     };
   }
 
-  //   private async forwardPass(node: StoryNode): Promise<void> {
-  //     for (const child of node.children) {
-  //       await this.forwardPass(child);
-  //     }
+//   private async summarizeChildren(
+//     parentSummary: string,
+//     children: StoryNode[]
+//   ): Promise<string> {
+//     const subQuestionsAndTheirAnswers = children
+//       .map((child) => `${child.shortSummary}`)
+//       .join('\n');
+//     const questionPrompt = `Given the question: ${parentSummary}, and the following related sub-questions and their answers:\n${subQuestionsAndTheirAnswers}\n\nProvide a concise summary of all of the sub-questions and their answers. ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
+//     return this.model.call(questionPrompt);
+//   }
 
-  //     let summaryAnswer = node.answer;
-  //     // Summarize the answers to the sub-questions, if there are multiple
-  //     if (node.children.length > 1) {
-  //       summaryAnswer = await this.summarizeChildren(
-  //         node.question,
-  //         node.children
-  //       );
-  //     }
-  //     node.answer = summaryAnswer;
-  //   }
+//   private async forwardPass(node: StoryNode): Promise<void> {
+//     for (const child of node.children) {
+//       await this.forwardPass(child);
+//     }
+
+//     let updatedSummary = node.shortSummary;
+//     // Summarize the answers to the sub-questions, if there are multiple
+//     if (node.children.length > 1) {
+//       updatedSummary = await this.summarizeChildren(
+//         node.shortSummary,
+//         node.children
+//       );
+//     }
+//     node.shortSummary = updatedSummary;
+//   }
+
   //   private async backwardPass(node: ThoughtNode): Promise<void> {
   //     // Generate new answers to the sub-questions given the answer to the initial question
   //     for (const child of node.children) {
@@ -206,21 +209,17 @@ export class StoryTree {
     initialQuestion: string,
     filenameForCheckpoint = 'checkpoint'
   ): Promise<StoryNode> {
-    const tree = await this.constructStoryTreeLevelRecursively(
-      initialQuestion,
-      StoryNodeType.Campaign
-    );
-    fs.writeFileSync(`${filenameForCheckpoint}.json`, JSON.stringify(tree));
+    // const tree = await this.constructStoryTreeLevelRecursively(
+    //   initialQuestion,
+    //   StoryNodeType.Campaign
+    // );
+    // fs.writeFileSync(`${filenameForCheckpoint}.json`, JSON.stringify(tree));
     // import tree from checkpoint.json
 
-    // let evalTestTree = JSON.parse(
-    //   fs.readFileSync('./checkpoint_0_afterbackwards.json', 'utf8')
-    // );
+    let tree = JSON.parse(fs.readFileSync('./campaign_2.json', 'utf8'));
 
-    // evalTestTree = await evaluateChildrenScoresIfUndefined(
-    //   this.client,
-    //   evalTestTree
-    // );
+    tree = await evaluateAllNodeSummaries(this.model, tree);
+    fs.writeFileSync(`campaign_2_evaluated.json`, JSON.stringify(tree));
 
     // const tree = JSON.parse(
     //   fs.readFileSync(`./${filenameForCheckpoint}.json`, 'utf8')
