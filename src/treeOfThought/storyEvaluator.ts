@@ -1,10 +1,35 @@
 import { BaseLLM } from 'langchain/llms';
 import { StoryNode } from './storyTree.js';
+const LEADING_SCORE = `Score: [`;
 
 export interface EvaluationResult {
   score: number;
   reasoning: string;
 }
+const createScoringPrompt = (
+  node: StoryNode,
+  overarchingSummary: string,
+  relatedSummaries: string[]
+) => {
+  return `Given a main story summary, related storylines, and specific story details, rate how well the detailed story aligns with the main story and the related storylines.
+Note: A higher score means the detailed story is more consistent with the main story, the related storylines, and accurately represents its own details.
+
+Main story:
+${overarchingSummary}
+Related storylines:
+${relatedSummaries.join('\n')}
+Detailed story to be rated:
+${node.shortSummary}
+Specific details of the story:
+${node.children
+  .map((childNode) => {
+    return childNode.shortSummary;
+  })
+  .join('\n')}
+Give a rating on a scale from 1 to 10.
+Put your score in [square brackets], followed by your reasons for giving that score.
+${LEADING_SCORE}`;
+};
 
 function parseScore(scoresString: string): EvaluationResult {
   // Extract score
@@ -30,37 +55,41 @@ function parseScore(scoresString: string): EvaluationResult {
 
 export async function evaluateAllNodeSummaries(
   client: BaseLLM,
-  node: StoryNode
+  node: StoryNode,
+  siblings: StoryNode[] = [], // add a parameter for the siblings
+  parent: StoryNode | null = null // add a parameter for the parent
 ): Promise<StoryNode> {
   // Exit clause: If the node has no children, there's no need to evaluate it.
   if (node.children.length === 0) {
     return node;
   }
 
-  const LEADING_SCORE = `Score: [`;
-  const scoringPrompt = `Given the following summary of a story and its detailed descriptions, rate the summary's coherence with its details on a scale from 1 to 10.
-Put your score in [square brackets], followed by your reasons as to why you gave that number.
-Note: a higher score means the summary is more coherent, inclusive, and accurate to its details.
+  // Determine the overarching summary and related summaries
+  const overarchingSummary = parent ? parent.shortSummary : '';
+  const relatedSummaries = siblings.map((sibling) => sibling.shortSummary);
 
-Summary to be rated:
-${node.shortSummary}
-Details:
-${node.children
-  .map((childNode) => {
-    return childNode.shortSummary;
-  })
-  .join('\n')}
-  
-  ${LEADING_SCORE}`;
+  // Create the scoring prompt
+  const scoringPrompt = createScoringPrompt(
+    node,
+    overarchingSummary,
+    relatedSummaries
+  );
 
   const scoresString = await client.call(scoringPrompt);
   const scores = parseScore(LEADING_SCORE + scoresString);
 
   node.evalScore = scores.score;
   node.evalReasoning = scores.reasoning;
+
   // Recursively call this function for each of the node's children
   for (const childNode of node.children) {
-    await evaluateAllNodeSummaries(client, childNode);
+    // Pass the other children (i.e., the siblings) when calling evaluateAllNodeSummaries for a child
+    await evaluateAllNodeSummaries(
+      client,
+      childNode,
+      node.children.filter((sib) => sib !== childNode)
+    );
   }
+
   return node;
 }
