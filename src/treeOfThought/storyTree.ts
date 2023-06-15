@@ -1,9 +1,8 @@
 import fs from 'fs';
 import { ProgressEstimator } from './progressEstimator.js';
 import { BaseLLM } from 'langchain/llms';
-import { evaluateAllNodeSummaries } from './storyEvaluator.js';
 
-const DO_NOT_MENTION_SUBQUESTIONS = `Omit usage of the word 'sub-questions' in your answer.`;
+const DO_NOT_MENTION_YOURSELF = `DO NOT TALK ABOUT YOURSELF IN YOUR ANSWER.`;
 const PREFIX = `Question: `;
 const SUFFIX = `\nAnswer: `;
 const GENERIC_ROLE = `As an AI writer, your mission is to create the next bestseller that captivates readers with its immersive narrative.
@@ -53,21 +52,6 @@ export class StoryTree {
 
   private removeNumberingFromStartOfString(subQuestion: string): string {
     return subQuestion.replace(/^\d+[.)]\s*/, '').trim();
-  }
-
-  // function that asks the LLM to answer 1 question specifically
-  private async answerQuestion(question: string): Promise<string> {
-    const questionPrompt = `Given the question "${question}", what is the most accurate answer you can provide? ${DO_NOT_MENTION_SUBQUESTIONS}  Answer:\n`;
-    return this.model.call(questionPrompt);
-  }
-
-  private async answerSubquestionBasedOnParentAnswer(
-    parentQuestion: string,
-    parentAnswer: string,
-    subQuestion: string
-  ): Promise<string> {
-    const questionPrompt = `Given the question "${parentQuestion}" and its answer "${parentAnswer}", how would you refine or update the answer to the related sub-question "${subQuestion}"? ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
-    return this.model.call(questionPrompt);
   }
 
   //   private async generateChildren(question: string): Promise<string> {
@@ -140,32 +124,53 @@ export class StoryTree {
     };
   }
 
-//   private async summarizeChildren(
-//     parentSummary: string,
-//     children: StoryNode[]
-//   ): Promise<string> {
-//     const subQuestionsAndTheirAnswers = children
-//       .map((child) => `${child.shortSummary}`)
-//       .join('\n');
-//     const questionPrompt = `Given the question: ${parentSummary}, and the following related sub-questions and their answers:\n${subQuestionsAndTheirAnswers}\n\nProvide a concise summary of all of the sub-questions and their answers. ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
-//     return this.model.call(questionPrompt);
-//   }
+  private async rewriteShortSummaryBasedOnChildren(
+    node: StoryNode
+  ): Promise<void> {
+    // Process all children nodes first (if any)
+    for (const child of node.children) {
+      await this.rewriteShortSummaryBasedOnChildren(child);
+    }
 
-//   private async forwardPass(node: StoryNode): Promise<void> {
-//     for (const child of node.children) {
-//       await this.forwardPass(child);
-//     }
+    // Now we process the current node
+    let updatedSummary = node.shortSummary;
+    // Summarize the answers to the sub-questions, if there are multiple
+    if (node.children.length > 1) {
+      updatedSummary = await this.summarizeChildren(
+        node.shortSummary,
+        node.children
+      );
+      console.log('UPDATED SUMMARY:\n', updatedSummary + '\n');
+    }
+    node.shortSummary = updatedSummary;
+  }
 
-//     let updatedSummary = node.shortSummary;
-//     // Summarize the answers to the sub-questions, if there are multiple
-//     if (node.children.length > 1) {
-//       updatedSummary = await this.summarizeChildren(
-//         node.shortSummary,
-//         node.children
-//       );
-//     }
-//     node.shortSummary = updatedSummary;
-//   }
+  private async summarizeChildren(
+    parentSummary: string,
+    children: StoryNode[]
+  ): Promise<string> {
+    const childrenShortSummaries = children
+      .map((child) => `${child.shortSummary}`)
+      .join('\n');
+    const questionPrompt = `${this.genrePrompt}\nGiven the overarching narrative: """${parentSummary}""", and the following story elements: """${childrenShortSummaries}"""\n\n provide a concise and coherent summary that connects all the story elements to the overarching narrative. Remember to maintain the tone and style of the genre. ${DO_NOT_MENTION_YOURSELF}\n Answer: `;
+    return this.model.call(questionPrompt);
+  }
+
+  private async forwardPass(node: StoryNode): Promise<void> {
+    for (const child of node.children) {
+      await this.forwardPass(child);
+    }
+
+    let updatedSummary = node.shortSummary;
+    // Summarize the answers to the sub-questions, if there are multiple
+    if (node.children.length > 1) {
+      updatedSummary = await this.summarizeChildren(
+        node.shortSummary,
+        node.children
+      );
+    }
+    node.shortSummary = updatedSummary;
+  }
 
   //   private async backwardPass(node: ThoughtNode): Promise<void> {
   //     // Generate new answers to the sub-questions given the answer to the initial question
@@ -207,20 +212,34 @@ export class StoryTree {
 
   public async generate(
     initialQuestion: string,
-    filenameForCheckpoint = 'checkpoint'
+    level: StoryNodeType = StoryNodeType.Campaign,
+    saveToFileName?: string
   ): Promise<StoryNode> {
-    // const tree = await this.constructStoryTreeLevelRecursively(
-    //   initialQuestion,
-    //   StoryNodeType.Campaign
+    const tree = await this.constructStoryTreeLevelRecursively(
+      initialQuestion,
+      level
+    );
+    if (saveToFileName) {
+      fs.writeFileSync(`${saveToFileName}.json`, JSON.stringify(tree));
+    }
+
+    // tree = JSON.parse(fs.readFileSync('./campaign_2.json', 'utf8'));
+
+    await this.rewriteShortSummaryBasedOnChildren(tree);
+    if (saveToFileName) {
+      fs.writeFileSync(
+        `${saveToFileName}_rewritten.json`,
+        JSON.stringify(tree)
+      );
+    }
+    // tree = JSON.parse(fs.readFileSync('./campaign_2_rewritten.json', 'utf8'));
+
+    // tree = await evaluateAllNodeSummaries(
+    //   this.model
+    //   tree,
+    //   tree.children
     // );
-    // fs.writeFileSync(`${filenameForCheckpoint}.json`, JSON.stringify(tree));
-    // import tree from checkpoint.json
-
-    let tree = JSON.parse(fs.readFileSync('./campaign_2.json', 'utf8'));
-
-    tree = await evaluateAllNodeSummaries(this.model, tree);
-    fs.writeFileSync(`campaign_2_evaluated.json`, JSON.stringify(tree));
-
+    // fs.writeFileSync(`campaign_2_evaluated_openai.json`, JSON.stringify(tree));
     // const tree = JSON.parse(
     //   fs.readFileSync(`./${filenameForCheckpoint}.json`, 'utf8')
     // );
