@@ -3,37 +3,44 @@ import { MyLocalAI } from './localLLM.js';
 import { TreeOfThought } from './treeOfThought/treeOfThought.js';
 import FaissManager from './embedding/faissManager.js';
 import { ConsoleInterface } from './consoleInterface.js';
+import { StoryTree } from './treeOfThought/storyTree.js';
 
 dotenv.config();
 
-async function main() {
-  // Initialize your memory manager and AI facade
-  const vectorDBManager = new FaissManager();
-  const llm = new MyLocalAI({ url: 'http://localhost:5000/api/v1/generate' });
+const llm = new MyLocalAI({ url: 'http://localhost:5000/api/v1/generate' });
+const storyTree = new StoryTree(llm);
+storyTree.generate(
+  'A brief yet tragic story about the escapades of Sir Fag, a fallen from grace alcoholic paladin that still keeps trying to do the right thing despite not knowing what it is and repeatedly failing to achieve anything anyone would consider to be a good outcome'
+);
 
-  // Save the story intro to memory
-  await vectorDBManager.saveContext({
-    text: `Our story begins in the small village of Creepyville, where children have been mysteriously disappearing.
-Villagers speak in hushed whispers of a decrepit crypt nearby, ghostly laughter can be heard echoing at night.
-Determined to solve the mystery and bring peace to Creepyville, the player - called Sir Fag - has decided to investigate the crypt.
-With his trusty sword by his side, he stands before the crypt's entrance, its ominous darkness promising danger and perhaps, answers.`
-  });
+// async function main() {
+//   // Initialize your memory manager and AI facade
+//   const vectorDBManager = new FaissManager();
+//   const llm = new MyLocalAI({ url: 'http://localhost:5000/api/v1/generate' });
 
-  // Create a new ConsoleInterface instance with the memory manager and AI facade
-  const consoleInterface = new ConsoleInterface({
-    memory: vectorDBManager,
-    llm: llm
-  });
+//   // Save the story intro to memory
+//   await vectorDBManager.saveContext({
+//     text: `Our story begins in the small village of Creepyville, where children have been mysteriously disappearing.
+// Villagers speak in hushed whispers of a decrepit crypt nearby, ghostly laughter can be heard echoing at night.
+// Determined to solve the mystery and bring peace to Creepyville, the player - called Sir Fag - has decided to investigate the crypt.
+// With his trusty sword by his side, he stands before the crypt's entrance, its ominous darkness promising danger and perhaps, answers.`
+//   });
 
-  // Start the console interface
-  consoleInterface.start();
+//   // Create a new ConsoleInterface instance with the memory manager and AI facade
+//   const consoleInterface = new ConsoleInterface({
+//     memory: vectorDBManager,
+//     llm: llm
+//   });
 
-  // The console interface will now listen for user input, generate responses using the AI facade,
-  // and save the input and responses in the memory manager
-}
+//   // Start the console interface
+//   consoleInterface.start();
 
-// Run the main function
-main().catch(console.error);
+//   // The console interface will now listen for user input, generate responses using the AI facade,
+//   // and save the input and responses in the memory manager
+// }
+
+// // Run the main function
+// main().catch(console.error);
 
 // // Initialize the LLM, memory, and conversation chain
 // const localLLM = new MyLocalAI({
