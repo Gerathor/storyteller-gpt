@@ -110,16 +110,19 @@ export class StreamingConsoleInterface {
       text: input
     });
 
-    const prompt = `${this.template}
-Relevant past story events (feel free to ignore these if you don't think they are relevant):\n${
-      memoryContext.texts
+    let lastMessages = this.getInPromptMemoryAsRawText();
+
+    let promptEnding = `${this.humanPrefix}${input}
+    ${this.aiPrefix}`;
+    if (input.toLowerCase() === 'continue') {
+      promptEnding = '';
+      lastMessages = lastMessages.trimEnd();
     }
-The current story (you are to continue from here):\n${this.getInPromptMemoryAsRawText()}
-${this.humanPrefix}${input}
-${this.aiPrefix}`;
+    const prompt = `${this.template}
+Relevant past story events (feel free to ignore these if you don't think they are relevant):\n${memoryContext.texts}
+The current story (you are to continue from here):\n${lastMessages}${promptEnding}`;
     // Answer the question, along with the memory recall
 
-    // Answer the question, along with the memory recall
     this.llm.events.on('incomingTextStream', this.incomingTextStreamHandler);
     this.llm.events.on('end', this.endHandler);
     await this.llm.call(prompt);
