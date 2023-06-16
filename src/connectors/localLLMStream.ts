@@ -8,10 +8,12 @@ interface TextGenerationWebUIOptions extends BaseLLMParams {
 }
 
 function areOverlapping(string1: string, string2: string): boolean {
-  if (string1.length > string2.length) {
-    return string1.startsWith(string2);
+  const lowerString1 = string1.toLowerCase();
+  const lowerString2 = string2.toLowerCase();
+  if (lowerString1.length > lowerString2.length) {
+    return lowerString1.startsWith(lowerString2);
   } else {
-    return string2.startsWith(string1);
+    return lowerString2.startsWith(lowerString1);
   }
 }
 export class MyLocalAIStream extends BaseLLM {

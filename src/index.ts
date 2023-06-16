@@ -23,7 +23,9 @@ async function consoleInterfaceDemo() {
   const llm = new MyLocalAIStream({
     uri: 'ws://localhost:5005/api/v1/stream'
   });
-
+  console.log(
+    '\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n'
+  );
   // Save the story intro to memory
   const startupPrompt = `Our story begins in the small village of Creepyville, where children have been mysteriously disappearing.
   Villagers speak in hushed whispers of a decrepit crypt nearby, ghostly laughter can be heard echoing at night.
