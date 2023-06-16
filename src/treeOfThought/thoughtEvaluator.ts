@@ -1,4 +1,4 @@
-import { MyLocalAI } from '../localLLM.js';
+import { MyLocalAI } from '../connectors/localLLM.js';
 import { ThoughtNode } from './treeOfThought.js';
 
 function parseScores(scoresString: string): number[] {

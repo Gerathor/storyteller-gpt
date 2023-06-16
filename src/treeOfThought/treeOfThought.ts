@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { MyLocalAI } from '../localLLM.js';
+import { MyLocalAI } from '../connectors/localLLM.js';
 import { ProgressEstimator } from './progressEstimator.js';
 import { evaluateChildrenScoresIfUndefined } from './thoughtEvaluator.js';
 

@@ -1,4 +1,4 @@
-import { MyLocalAI } from './localLLM.js';
+import { MyLocalAI } from './connectors/localLLM.js';
 
 export class Character {
   private localLLM: MyLocalAI;
