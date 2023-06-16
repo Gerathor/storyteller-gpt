@@ -16,3 +16,21 @@ export function colorizeLog(message: string): string {
   // Apply the color code to the message
   return `${faintGrey}${message}${resetColor}`;
 }
+
+export function truncateOutputAtStoppingString(
+  output: string,
+  stoppingStrings: string[]
+): string {
+  let truncatedOutput = output;
+
+  for (const stoppingString of stoppingStrings) {
+    const index = truncatedOutput.indexOf(stoppingString);
+    if (index !== -1) {
+      truncatedOutput = output.substring(0, index);
+    }
+  }
+  if (truncatedOutput.length !== output.length) {
+    console.log('### SYSTEM LOG: output was truncated');
+  }
+  return truncatedOutput.trim();
+}
