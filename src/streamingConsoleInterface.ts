@@ -1,7 +1,6 @@
 import { ReadLine, createInterface } from 'readline';
 import { BaseMemory } from 'langchain/memory';
-import { BaseLLM } from 'langchain/llms';
-import { truncateOutputAtStoppingString } from './stringManipulators.js';
+
 import { MyLocalAIStream } from './connectors/localLLMStream.js';
 
 const DUNGEON_MASTER = `
@@ -30,6 +29,7 @@ export class StreamingConsoleInterface {
   private humanPrefix = 'Player: ';
   private aiPrefix = 'Storyteller: ';
   private inPromptMemory: Exchange[] = [];
+  private incomingTextStream = '';
 
   constructor({
     memory,
@@ -57,6 +57,15 @@ export class StreamingConsoleInterface {
   stop(): void {
     this.readline.close();
   }
+
+  private incomingTextStreamHandler = (text: string) => {
+    process.stdout.write(text);
+    this.incomingTextStream = this.incomingTextStream + text;
+  };
+
+  private endHandler = () => {
+    console.log('\n');
+  };
 
   private prompt(): void {
     this.readline.question('Enter your query: ', async (input) => {
@@ -109,22 +118,25 @@ The current story (you are to continue from here):\n${this.getInPromptMemoryAsRa
 ${this.humanPrefix}${input}
 ${this.aiPrefix}`;
     // Answer the question, along with the memory recall
-    this.llm.events.on('incomingTextStream', (text: string) => {
-      process.stdout.write(text);
-    });
 
-    this.llm.events.on('end', () => {
-      console.log('\n'); // Print a newline when the stream ends
-    });
-    const response = await this.llm.call(prompt);
-    console.log(response);
+    // Answer the question, along with the memory recall
+    this.llm.events.on('incomingTextStream', this.incomingTextStreamHandler);
+    this.llm.events.on('end', this.endHandler);
+    await this.llm.call(prompt);
+    // Remove the event listeners to stop listening
+    this.llm.events.removeListener(
+      'incomingTextStream',
+      this.incomingTextStreamHandler
+    );
+    this.llm.events.removeListener('end', this.endHandler);
+    // console.log(this.incomingTextStream);
     this.inPromptMemory.push({
-      human: `${this.humanPrefix}: ${input}`,
-      ai: `${this.aiPrefix}: ${response}`
+      human: `${this.humanPrefix}${input}`,
+      ai: `${this.aiPrefix}${this.incomingTextStream}`
     });
     this.truncateMemoryAndStoreLongTermIfNeeded();
 
     // Print the response to keep conversation flowing
-    console.log('\n');
+    this.incomingTextStream = '';
   }
 }

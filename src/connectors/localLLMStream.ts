@@ -7,12 +7,19 @@ interface TextGenerationWebUIOptions extends BaseLLMParams {
   uri?: string;
 }
 
+function areOverlapping(string1: string, string2: string): boolean {
+  if (string1.length > string2.length) {
+    return string1.startsWith(string2);
+  } else {
+    return string2.startsWith(string1);
+  }
+}
 export class MyLocalAIStream extends BaseLLM {
   uri: string;
   socket: WebSocket | null = null;
   public events = new EventEmitter();
   private incomingStream = '';
-  private endingStrings = ['player:'];
+  private endingString = 'player:';
   private buffer = ''; // Buffer to hold back text
 
   constructor(options: TextGenerationWebUIOptions) {
@@ -64,42 +71,19 @@ export class MyLocalAIStream extends BaseLLM {
           case 'text_stream': {
             const incomingText = incomingData['text'];
             this.buffer += incomingText; // Add incoming text to buffer
-
-            const endingStringIndex = this.endingStrings.findIndex(
-              (endingString) => this.buffer.toLowerCase().includes(endingString)
-            );
-
-            // If the buffer contains the ending string
-            if (endingStringIndex >= 0) {
-              // Extract the text before the ending string
-              const beforeEndingString = this.buffer.slice(
-                0,
-                this.buffer
-                  .toLowerCase()
-                  .indexOf(this.endingStrings[endingStringIndex])
-              );
-
-              // Emit the text before the ending string
-              this.events.emit('incomingTextStream', beforeEndingString);
-              this.incomingStream += beforeEndingString;
-
-              // Remove the emitted text and the ending string from the buffer
-              this.buffer = this.buffer.slice(
-                this.buffer
-                  .toLowerCase()
-                  .indexOf(this.endingStrings[endingStringIndex]) +
-                  this.endingStrings[endingStringIndex].length
-              );
-
-              // Close the connection and resolve the promise if the ending string is detected
-              if (this.buffer.length === 0) {
+            if (areOverlapping(this.buffer, this.endingString)) {
+              if (
+                this.buffer.toLowerCase() === this.endingString.toLowerCase()
+              ) {
+                // Todo: end connection because the ending string is detected
                 this.socket?.close();
-                const fullString = this.incomingStream + '\n';
+                const fullString = this.incomingStream;
                 this.incomingStream = '';
                 this.buffer = '';
-                this.events.removeAllListeners(); // Remove all previous listeners
+                // this.events.removeAllListeners(); // Remove all previous listeners
                 resolve(fullString);
-              }
+                break;
+              } else break;
             } else {
               // If the buffer does not contain the ending string, emit the whole buffer and clear it
               this.events.emit('incomingTextStream', this.buffer);
@@ -113,7 +97,7 @@ export class MyLocalAIStream extends BaseLLM {
           case 'stream_end': {
             this.events.emit('end'); // Emit an end event when the stream ends
             this.socket?.close();
-            const fullString = this.incomingStream + '\n'; // Do not include the buffer in the final string
+            const fullString = this.incomingStream; // Do not include the buffer in the final string
             this.incomingStream = '';
             this.buffer = '';
             resolve(fullString); // Resolve the promise when the stream ends
