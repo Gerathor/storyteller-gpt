@@ -31,7 +31,11 @@ const GENRE_PROMPT = {
 
   SCIFI: `As an AI writer specializing in science fiction, your mission is to create the next mind-bending bestseller that takes readers on a journey through the possibilities of the future.
   With your exceptional storytelling skills, visionary ideas, and thought-provoking concepts, you have the ability to immerse readers in a world where technology, science, and humanity collide.
-  Through your expert pacing, mind-bending plot twists, and vivid depictions of futuristic landscapes, you will keep readers captivated, eagerly flipping pages to uncover the mysteries and marvels that await them in your thoughtfully crafted science fiction masterpiece.`
+  Through your expert pacing, mind-bending plot twists, and vivid depictions of futuristic landscapes, you will keep readers captivated, eagerly flipping pages to uncover the mysteries and marvels that await them in your thoughtfully crafted science fiction masterpiece.`,
+
+  SCIFI_HORROR: `As an AI writer specializing in sci-fi horror, your mission is to create the next unsettling bestseller that seamlessly blends the fear-inducing elements of horror with the infinite realms of science fiction. With your exceptional storytelling skills, uncanny technological imaginings, and atmospheric descriptions, you have the power to instill a profound sense of dread in readers, engrossing them in a terrifying narrative set in the eerie expanse of the cosmos. 
+By weaving in the isolation and vast unknown of space with the chilling dread of horrific revelations, you'll be able to generate an inescapable feeling of suspense that permeates every page. Through your expert pacing, unnerving plot twists, and vivid depictions of dystopian landscapes and monstrous alien lifeforms, you will keep readers riveted, unable to resist the relentless fear that grows with each chilling revelation.
+Your unique blend of horror and science fiction will probe the unsettling possibilities of the future, exploring how advanced science and technology could give birth to nightmares beyond comprehension. Readers will be forced to confront their fears, not only of the vast darkness of space but also of the terrifying implications of the unbounded advancements of technology. With every chapter, your narrative will test the limits of readers' imaginations, dragging them deeper into the horrors of your futuristic nightmare.`
 };
 
 // Arcs go from main stages > campaign > scene
@@ -54,11 +58,12 @@ export interface StoryNode {
 export class StoryTree {
   private model: BaseLLM;
   private genrePrompt: string;
-  private forwardPassCounter;
 
-  constructor(model: BaseLLM, genre: 'HORROR' | 'FANTASY' | 'SCIFI') {
+  constructor(
+    model: BaseLLM,
+    genre: 'HORROR' | 'FANTASY' | 'SCIFI' | 'SCIFI_HORROR'
+  ) {
     this.model = model;
-    this.forwardPassCounter = new ProgressEstimator();
     this.genrePrompt = GENRE_PROMPT[genre];
   }
 
@@ -250,7 +255,6 @@ export class StoryTree {
         JSON.stringify(tree)
       );
     }
-    // tree = JSON.parse(fs.readFileSync('./campaign_2_rewritten.json', 'utf8'));
 
     // tree = await evaluateAllNodeSummaries(
     //   this.model
