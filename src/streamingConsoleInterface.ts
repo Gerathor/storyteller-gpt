@@ -2,13 +2,14 @@ import { ReadLine, createInterface } from 'readline';
 import { BaseMemory } from 'langchain/memory';
 
 import { MyLocalAIStream } from './connectors/localLLMStream.js';
-import { StoryNode } from './treeOfThought/storyTree.js';
+import { StoryNode, StoryNodeType } from './treeOfThought/storyTree.js';
 import { StoryManager } from './treeOfThought/storyManager.js';
+import { Character } from './character.js';
 
 const DUNGEON_MASTER = `
 You are an AI storyteller. Your task is to create vivid, detailed, and dramatic descriptions of the actions taken by the characters,
 regardless of what those actions are. Your job is to bring the character's intentions to screen, though the outcome need not always be what the player intends. Always write in third person.
-You have a story skeleton to guide you, you are to try to steer the story into that direction.
+You have a story skeleton to guide you, you are to try to steer the story into that direction. However, always remember that the player is in control - do not describe what they are doing unless it is in reaction to what they have said they want to do.
 `;
 export const STORY_STRUCTURE = `Your narratives will be organized into three tiers: Stages, Campaigns, and Scenes.
 Stages: These are broad narrative phases, including exposition, rising action, climax, and denouement, defining the overall plot progression.
@@ -27,6 +28,8 @@ interface ConsoleInterfaceConfig {
   llm: MyLocalAIStream;
   template?: string;
   storySkeleton: StoryNode;
+  storySkeletonHighestLevel?: StoryNodeType;
+  aiCharacterOverride?: Character;
 }
 
 interface Exchange {
@@ -43,6 +46,7 @@ export class StreamingConsoleInterface {
   private humanPrefix = 'Player: ';
   private aiPrefix = 'Storyteller: ';
   private inPromptMemory: Exchange[] = [];
+  private aiCharacterOverride?: Character;
   private incomingTextStream = '';
 
   constructor({
@@ -51,17 +55,23 @@ export class StreamingConsoleInterface {
     template = `${DUNGEON_MASTER}
 ${GENRE_PROMPT_SHORT.FANTASY}
 ${STORY_STRUCTURE}`,
-    storySkeleton
+    storySkeleton,
+    storySkeletonHighestLevel = StoryNodeType.Stage,
+    aiCharacterOverride
   }: ConsoleInterfaceConfig) {
     this.memory = memory;
     this.llm = llm;
     this.template = template;
-    this.storyManager = new StoryManager(storySkeleton);
+    this.storyManager = new StoryManager(
+      storySkeleton,
+      storySkeletonHighestLevel
+    );
     this.inPromptMemory = [];
     this.readline = createInterface({
       input: process.stdin,
       output: process.stdout
     });
+    this.aiCharacterOverride = aiCharacterOverride;
     console.log('And so the story begins...\n');
   }
 
@@ -83,7 +93,15 @@ ${STORY_STRUCTURE}`,
     console.log('\n');
   };
 
-  private prompt(): void {
+  private async prompt(): Promise<void> {
+    if (this.aiCharacterOverride) {
+      const suggestedPrompt = await this.aiCharacterOverride.createPrompt(
+        this.getInPromptMemoryAsRawText()
+      );
+      await this.handleInput(suggestedPrompt || 'continue');
+      this.prompt();
+      return;
+    }
     this.readline.question('Enter your query: ', async (input) => {
       await this.handleInput(input);
       this.prompt(); // Call this.prompt() again to keep asking for input
@@ -139,7 +157,9 @@ ${this.storyManager.getCurrentStoryTemplate()}
 Relevant past story events (feel free to ignore these if you don't think they are relevant):\n${
       memoryContext.texts
     }
-The current story (you are to continue from here):\n${lastMessages}${promptEnding}`;
+The current story (you are to continue from here):\n${lastMessages}
+Continue the story with one paragraph:
+${promptEnding}`;
     // Answer the question, along with the memory recall
 
     this.llm.events.on('incomingTextStream', this.incomingTextStreamHandler);

@@ -1,25 +1,28 @@
-import { MyLocalAI } from './connectors/localLLM.js';
+import { BaseLLM } from 'langchain/llms';
 
 export class Character {
-  private localLLM: MyLocalAI;
+  private localLLM: BaseLLM;
   private description: string;
 
-  constructor(description: string, localLLM: MyLocalAI) {
+  constructor(description: string, localLLM: BaseLLM) {
     this.description = description;
     this.localLLM = localLLM;
   }
 
   async createPrompt(storySoFar: string): Promise<string | undefined> {
-    const primeText = `
-You are an AI storyteller and you are tasked with creating the next action for a character. The character is described as follows: "${this.description}". Considering the character's traits and the events of the story so far, what action does the character decide to take next? Describe what the character action should be in first person. Example: "I open the door", "I rush towards the enemy, uncaring about the flying arrows" etc. \n\n THE STORY SO FAR:`;
+    const instructions = `You are a character in a tabletop RPG-style game. Your task is to propose your next action based on your description and the storyline. Speak in first person, keep your actions concise, and respond based on what has been mentioned in the story. Assume your action's success is undetermined until the storyteller decides.`;
 
-    const fullPrompt = primeText + '\n' + storySoFar + 'Proposed action:';
+    const fullPrompt = `Character Description: "${this.description}".
+    THE STORY SO FAR: ${storySoFar}
+    ${instructions}
+    Proposed action:`;
 
     try {
       const response = await this.localLLM.call(fullPrompt);
+      console.log(response);
       return response;
     } catch (error) {
-      console.error(error);
+      console.error('Error generating prompt:', error);
     }
   }
 }

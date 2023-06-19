@@ -43,7 +43,7 @@ export class MyLocalAIStream extends BaseLLM {
       top_a: 0,
       repetition_penalty: 1.18,
       top_k: 40,
-      min_length: 100,
+      min_length: 50,
       no_repeat_ngram_size: 0,
       num_beams: 1,
       penalty_alpha: 0,
