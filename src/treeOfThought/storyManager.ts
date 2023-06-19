@@ -1,27 +1,42 @@
 // storyManager.js
 
 import { OpenAI } from 'langchain';
-import { StoryNode } from './storyTree.js';
+import { StoryNode, StoryNodeType } from './storyTree.js';
 import { SceneEvaluator } from '../evaluators-DEPRECATED/sceneEvaluator.js';
+
+const MIN_INTERACTION_PER_SCENE = 3;
 
 interface Bookmark {
   currentStage: number;
   currentCampaign: number;
   currentScene: number;
+  currentInteractionCount: number;
 }
 
 export class StoryManager {
   private storySkeleton: StoryNode;
+  private highestStoryLevel: StoryNodeType;
   private bookmark: Bookmark;
   private evaluator: SceneEvaluator;
+  private optionalNextScene = () => {
+    if (this.bookmark.currentInteractionCount > MIN_INTERACTION_PER_SCENE) {
+      return `Next scene: ${this.getNextScene().shortSummary}`;
+    }
+  };
 
-  constructor(storySkeleton: StoryNode) {
-    this.storySkeleton = storySkeleton;
+  constructor(
+    storySkeleton: StoryNode,
+    highestLevel: StoryNodeType = StoryNodeType.Stage
+  ) {
+    this.highestStoryLevel = highestLevel;
     this.bookmark = {
       currentStage: 0,
       currentCampaign: 0,
-      currentScene: 0
+      currentScene: 0,
+      currentInteractionCount: 0
     };
+    this.storySkeleton = storySkeleton;
+    this.validateStorySkeleton(highestLevel);
     this.evaluator = new SceneEvaluator(
       new OpenAI({
         openAIApiKey: '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'
@@ -29,30 +44,90 @@ export class StoryManager {
     );
   }
 
-  getCurrentStoryTemplate() {
-    const currentStage =
-      this.storySkeleton.children[this.bookmark.currentStage];
-    const currentCampaign =
-      currentStage.children[this.bookmark.currentCampaign];
-    const currentScene = currentCampaign.children[this.bookmark.currentScene];
+  validateStorySkeleton(highestStoryLevel: StoryNodeType) {
+    try {
+      if (highestStoryLevel >= StoryNodeType.Stage) {
+        const currentStage = this.getCurrentStage();
+        if (!currentStage)
+          throw new Error('The story skeleton does not contain any stages.');
 
-    return `
-      STORY SKELETON:
-      Short synopsis: ${this.storySkeleton.shortSummary}
-      Current Stage: ${currentStage.shortSummary}
-      Current Campaign: ${currentCampaign.shortSummary}
-      Current Scene: ${currentScene.shortSummary}
-      If you think it is appropriate to end the scene and go to the next one, type "--- END OF SCENE ---".
-    `;
+        if (highestStoryLevel >= StoryNodeType.Campaign) {
+          const currentCampaign = this.getCurrentCampaign();
+          if (!currentCampaign)
+            throw new Error(
+              `Stage at index ${this.bookmark.currentStage} does not contain any campaigns.`
+            );
+
+          if (highestStoryLevel >= StoryNodeType.Scene) {
+            const currentScene = this.getCurrentScene();
+            if (!currentScene)
+              throw new Error(
+                `Campaign at index ${this.bookmark.currentCampaign} of stage ${this.bookmark.currentStage} does not contain any scenes.`
+              );
+          }
+        }
+      }
+    } catch (error) {
+      if (error instanceof Error)
+        throw new Error(`Invalid Story Skeleton: ${error.message}`);
+      else throw error;
+    }
   }
 
+  getCurrentStoryTemplate() {
+    // const currentStage = this.getCurrentStage();
+    const currentCampaign = this.getCurrentCampaign();
+    const currentScene = this.getCurrentScene();
+
+    return `STORY SKELETON:
+Short synopsis of the whole story: ${this.storySkeleton.shortSummary}
+Current Campaign: ${currentCampaign.shortSummary}
+Current Scene: ${currentScene.shortSummary}
+${this.optionalNextScene()}`;
+  }
+
+  getCurrentStageTemplate() {
+    const currentStage = this.getCurrentStage();
+    if (currentStage) {
+      return `Current Stage: ${currentStage.shortSummary}`;
+    }
+    return '';
+  }
+
+  getCurrentStage = () => {
+    if (this.highestStoryLevel == StoryNodeType.Stage) {
+      return this.storySkeleton.children[this.bookmark.currentStage];
+    }
+    if (this.highestStoryLevel == StoryNodeType.Campaign) {
+      return this.storySkeleton;
+    }
+    return this.storySkeleton;
+  };
+
+  getCurrentCampaign = () => {
+    const currentStage = this.getCurrentStage();
+    if (currentStage) {
+      return currentStage.children[this.bookmark.currentCampaign];
+    } else {
+      return this.storySkeleton;
+    }
+  };
+
+  getCurrentScene = () => {
+    const currentCampaign = this.getCurrentCampaign();
+    return currentCampaign.children[this.bookmark.currentScene];
+  };
+
+  getNextScene = () =>
+    this.getCurrentCampaign().children[this.bookmark.currentScene + 1];
+
   async evaluateAndPossiblyMoveToNextScene(lastMessages: string) {
-    const currentStage =
-      this.storySkeleton.children[this.bookmark.currentStage];
-    const currentCampaign =
-      currentStage.children[this.bookmark.currentCampaign];
-    const currentScene = currentCampaign.children[this.bookmark.currentScene];
-    const nextScene = currentCampaign.children[this.bookmark.currentScene + 1];
+    this.bookmark.currentInteractionCount++;
+    if (this.bookmark.currentInteractionCount <= MIN_INTERACTION_PER_SCENE)
+      return false;
+    this.bookmark.currentInteractionCount = 0;
+    const currentScene = this.getCurrentScene();
+    const nextScene = this.getNextScene();
 
     const evaluation = await this.evaluator.evaluateObjective(
       lastMessages,
@@ -68,10 +143,9 @@ export class StoryManager {
   }
 
   advanceToNextScene() {
-    const currentStage =
-      this.storySkeleton.children[this.bookmark.currentStage];
-    const currentCampaign =
-      currentStage.children[this.bookmark.currentCampaign];
+    // TODO:  might want to rewrite the next scene at this point
+    const currentStage = this.getCurrentStage();
+    const currentCampaign = this.getCurrentCampaign();
 
     if (this.bookmark.currentScene + 1 >= currentCampaign.children.length) {
       // Current campaign ended. Move to next campaign
@@ -86,8 +160,6 @@ export class StoryManager {
     } else {
       this.bookmark.currentScene++;
     }
-    this.storySkeleton.children[this.bookmark.currentStage].children[
-      this.bookmark.currentCampaign
-    ].children[this.bookmark.currentScene].hasTranspired = true;
+    this.getCurrentScene().hasTranspired = true;
   }
 }
