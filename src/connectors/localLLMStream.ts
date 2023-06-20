@@ -32,7 +32,7 @@ export class MyLocalAIStream extends BaseLLM {
   async call(prompt: string): Promise<string> {
     const data = {
       prompt: prompt,
-      max_new_tokens: 500,
+      max_new_tokens: 200,
       do_sample: true,
       temperature: 1.3,
       top_p: 0.1,
@@ -73,7 +73,7 @@ export class MyLocalAIStream extends BaseLLM {
           case 'text_stream': {
             const incomingText = incomingData['text'];
             this.buffer += incomingText; // Add incoming text to buffer
-            if (areOverlapping(this.buffer, this.endingString)) {
+            if (areOverlapping(this.buffer.trim(), this.endingString)) {
               if (
                 this.buffer.toLowerCase() === this.endingString.toLowerCase()
               ) {

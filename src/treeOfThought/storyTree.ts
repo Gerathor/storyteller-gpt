@@ -1,24 +1,35 @@
 import fs from 'fs';
-import { ProgressEstimator } from './progressEstimator.js';
 import { BaseLLM } from 'langchain/llms';
-import { colorizeLog, smartSplit } from '../stringManipulators.js';
+import {
+  colorizeLog,
+  removeTripleQuotes,
+  smartSplit
+} from '../stringManipulators.js';
 
-const DO_NOT_MENTION_YOURSELF = `DO NOT TALK ABOUT YOURSELF IN YOUR ANSWER.`;
+export const DO_NOT_MENTION_YOURSELF = `DO NOT TALK ABOUT YOURSELF IN YOUR ANSWER.`;
 const PREFIX = `Question: `;
 const SUFFIX = `\nAnswer: `;
 const GENERIC_ROLE = `As an AI writer, your mission is to create the next bestseller that captivates readers with its immersive narrative.
 With your exceptional storytelling skills, evocative language, and deep understanding of human emotions, you have the ability to transport readers to captivating worlds and create unforgettable characters.
 Through your expert pacing, suspenseful plot twists, and masterful descriptions, you will keep readers enthralled and eager to devour each chapter.`;
+// const STORYTELLER_PROMPT = `As an AI writer, your task is to weave narratives that captivate and inspire. With your exceptional storytelling skills, detailed world-building, and expertise in pacing, you are capable of crafting narratives that keep readers glued to every word.
+// Your mission now is to create the foundation for a potentially captivating story. This requires drafting an outline that organizes the story's structure into Stages, Campaigns, and Scenes.
 
-const STORY_STRUCTURE = `The narratives you create will be structured into three interconnected levels: Stages, Campaigns, and Scenes.
+// Stages: Broad narrative phases that define the overall plot progression, such as exposition, rising action, climax, and denouement.
+// Campaigns: Mid-level, self-contained units within stages, each propelling the plot towards the next major development.
+// Scenes: The smallest narrative units, with specific actions, dialogues, and settings, each advancing its campaign.
 
-Stages: These form the broadest level of the story. Stages outline the overarching narrative arc, typically consisting of elements such as exposition, rising action, climax, and denouement. Each stage represents a significant phase in the progression of the plot.
+// In crafting this potential story outline, you need to remember that scenes construct campaigns, and campaigns form the comprehensive stages of the story. This tiered structure is essential to the story's skeletal framework.
+// Your goal is to outline a coherent and compelling narrative that connects all story elements, keeping in mind the genre you are writing for. Create a world, populate it with characters, and set them off on a journey that will grip readers' hearts and minds.
+// Remember, you are not just predicting a possible future, you are designing one. Take the readers on a journey they didn't know they wanted to embark upon, introducing them to a world they never knew they wanted to explore.
 
-Campaigns: Operating as the mid-level components of the narrative, campaigns are self-contained story units nested within the stages. Each campaign serves to push the overarching stage forward, leading to the next significant plot development.
+// Please proceed with crafting this potential story outline, maintaining the tone and style of your chosen genre. You will be instructed about which level of the story skeleton to focus on later on.`;
 
-Scenes: Scenes are the most granular level of the narrative, essentially functioning as screenplay elements. Each scene contributes to the development of its campaign, presenting the detailed actions, dialogues, and settings that bring the story to life.
-
-In this structured approach, the overall narrative is built from the ground up - scenes form campaigns, and campaigns build into the comprehensive stages of the story.`;
+export const STORY_STRUCTURE = `Your narratives will be organized into three tiers: Stages, Campaigns, and Scenes.
+Stages: These are broad narrative phases, including exposition, rising action, climax, and denouement, defining the overall plot progression.
+Campaigns: These are mid-level, self-contained units within stages, each driving the plot towards the next major development.
+Scenes: The smallest narrative units, functioning as screenplay elements with actions, dialogues, and settings, each propelling its campaign.
+In this approach, scenes construct campaigns, and campaigns form the comprehensive stages of the story, info about this is stored in the story skeleton.`;
 
 const GENRE_PROMPT = {
   HORROR: `As an AI writer specializing in horror, your mission is to create the next spine-chilling bestseller that terrifies readers with its immersive narrative.
@@ -71,12 +82,6 @@ export class StoryTree {
     return subQuestion.replace(/^\d+[.)]\s*/, '').trim();
   }
 
-  //   private async generateChildren(question: string): Promise<string> {
-  //     const prompt = `${ROLE}Given the question "${question}", what are some related sub-plots that we could explore?
-  //     Separate each sub-question with a SINGLE newline. ${DO_NOT_MENTION_SUBQUESTIONS} Answer:\n`;
-  //     return this.model.call(prompt);
-  //   }
-
   private async constructStoryTreeLevelRecursively(
     nodeSummary: string,
     layer: StoryNodeType
@@ -98,17 +103,17 @@ export class StoryTree {
     switch (layer) {
       case StoryNodeType.Stage:
         questionPrompt = `${PREFIX} ${this.genrePrompt}\n${STORY_STRUCTURE}\nYou are to generate the stages of the story. The story's main idea is as follows:\n"${nodeSummary}"\n\nCould you generate the stages following Freytag's Pyramid (exposition, rising action, climax, and denouement)? Provide a brief summary for each stage and introduce an overarching theme for the stage that will guide its story progression. ${SUFFIX}`;
-        nodeType = StoryNodeType.Campaign;
+        nodeType = StoryNodeType.Stage;
         splitOnSubstring = 'Stage';
         break;
       case StoryNodeType.Campaign:
         questionPrompt = `${PREFIX} ${this.genrePrompt}\n${STORY_STRUCTURE}\nYou are to generate the campaigns for the current stage, which is: ${nodeSummary} Given the stage summary and its overarching theme - "${nodeSummary}" , could you create interconnected story arcs (campaigns) that fit within this stage? Each campaign should build upon the previous one and contribute to the progression of the theme. Provide a brief summary for each campaign.${SUFFIX}`;
-        nodeType = StoryNodeType.Scene;
+        nodeType = StoryNodeType.Campaign;
         splitOnSubstring = 'Campaign';
         break;
       case StoryNodeType.Scene:
         questionPrompt = `${PREFIX} ${this.genrePrompt}\n${STORY_STRUCTURE}\nGiven the campaign summary "${nodeSummary}", could you outline the actual scenes as they might play out? Each scene should build upon the previous one and contribute to the campaign's progression. Try to reference previous scenes where appropriate. Provide a brief description for each scene.${SUFFIX}`;
-        nodeType = StoryNodeType.Scene; // This won't be used as the recursive call won't happen at this level
+        nodeType = StoryNodeType.Scene;
         splitOnSubstring = 'Scene';
         break;
     }
@@ -128,14 +133,6 @@ export class StoryTree {
         childSummary,
         layer - 1
       );
-      if (nodeType != StoryNodeType.Scene) {
-        // FIGURE OUT WHAT WE NEED TO DO AT THIS LEVEL FFS
-        console.log('?????');
-        // childNode.children = await this.constructStoryTreeLevelRecursively(
-        //   childSummary,
-        //   nodeType
-        // );
-      }
       children.push(childNode);
     }
 
@@ -179,6 +176,32 @@ export class StoryTree {
     return this.model.call(questionPrompt);
   }
 
+  private async rewriteScenesAsFuturePossibility(
+    node: StoryNode
+  ): Promise<StoryNode> {
+    if (node.children.length === 0) {
+      node.shortSummary = await this.rewriteTextAsFuturePossibility(node);
+    } else {
+      for (let i = 0; i < node.children.length; i++) {
+        node.children[i] = await this.rewriteScenesAsFuturePossibility(
+          node.children[i]
+        );
+      }
+    }
+    // Return the updated node
+    return node;
+  }
+
+  private async rewriteTextAsFuturePossibility(
+    node: StoryNode
+  ): Promise<string> {
+    const questionPrompt = `You are an AI tasked with projecting future possibilities in a narrative. Given the following story element, rewrite it in the future tense without adding new elements or changing the existing plot. Do not add extra details and do not mention when the events will transpire. Here is the text:\n\n"""${node.shortSummary}"""\n\nFuture-tense rewrite: """`;
+    const answer = await this.model.call(questionPrompt);
+    console.log(colorizeLog(`Original text:\n${node.shortSummary}`));
+    console.log(`Rewritten text:\n${answer}\n`);
+    return removeTripleQuotes(answer);
+  }
+
   private async forwardPass(node: StoryNode): Promise<void> {
     for (const child of node.children) {
       await this.forwardPass(child);
@@ -195,83 +218,34 @@ export class StoryTree {
     node.shortSummary = updatedSummary;
   }
 
-  //   private async backwardPass(node: ThoughtNode): Promise<void> {
-  //     // Generate new answers to the sub-questions given the answer to the initial question
-  //     for (const child of node.children) {
-  //       const newAnswer = await this.answerSubquestionBasedOnParentAnswer(
-  //         node.question,
-  //         node.answer,
-  //         child.question
-  //       );
-  //       child.answer = newAnswer;
-  //       await this.backwardPass(child);
-  //     }
-  //   }
-
-  //   private async iterativeRefinement(
-  //     node: ThoughtNode,
-  //     maxPasses = 3
-  //   ): Promise<void> {
-  //     let oldAnswer;
-  //     let counter = 0;
-  //     while (node.answer !== oldAnswer) {
-  //       oldAnswer = node.answer;
-
-  //       await this.forwardPass(node);
-  //       fs.writeFileSync(
-  //         `checkpoint_${counter}_afterforward.json`,
-  //         JSON.stringify(node)
-  //       );
-  //       await this.backwardPass(node);
-
-  //       fs.writeFileSync(
-  //         `checkpoint_${counter}_afterbackwards.json`,
-  //         JSON.stringify(node)
-  //       );
-  //       counter += 1;
-  //       if (counter > maxPasses) break;
-  //     }
-  //   }
-
   public async generate(
     initialQuestion: string,
     saveToFileName?: string,
     level: StoryNodeType = StoryNodeType.Stage
   ): Promise<StoryNode> {
-    const tree = await this.constructStoryTreeLevelRecursively(
-      initialQuestion,
-      level
-    );
-    if (saveToFileName) {
-      fs.writeFileSync(`${saveToFileName}.json`, JSON.stringify(tree));
-    }
+    // const tree = await this.constructStoryTreeLevelRecursively(
+    //   initialQuestion,
+    //   level
+    // );
+    // if (saveToFileName) {
+    //   fs.writeFileSync(`${saveToFileName}.json`, JSON.stringify(tree));
+    // }
 
     // tree = JSON.parse(fs.readFileSync('./campaign_2.json', 'utf8'));
 
-    await this.rewriteShortSummaryBasedOnChildren(tree);
-    if (saveToFileName) {
-      fs.writeFileSync(
-        `${saveToFileName}_rewritten.json`,
-        JSON.stringify(tree)
-      );
-    }
+    // await this.rewriteShortSummaryBasedOnChildren(tree);
+    // if (saveToFileName) {
+    //   fs.writeFileSync(
+    //     `${saveToFileName}_rewritten.json`,
+    //     JSON.stringify(tree)
+    //   );
+    // }
 
-    // tree = await evaluateAllNodeSummaries(
-    //   this.model
-    //   tree,
-    //   tree.children
-    // );
-    // fs.writeFileSync(`campaign_2_evaluated_openai.json`, JSON.stringify(tree));
-    // const tree = JSON.parse(
-    //   fs.readFileSync(`./${filenameForCheckpoint}.json`, 'utf8')
-    // );
-    // save const tree into a json file for later use
-
-    // await this.iterativeRefinement(tree);
-    // fs.writeFileSync(
-    //   `${filenameForCheckpoint}_after_refinement.json`,
-    //   JSON.stringify(tree)
-    // );
+    let tree = JSON.parse(
+      fs.readFileSync(`./${saveToFileName}_rewritten.json`, 'utf8')
+    );
+    tree = await this.rewriteScenesAsFuturePossibility(tree);
+    fs.writeFileSync(`${saveToFileName}_future.json`, JSON.stringify(tree));
     return tree;
   }
 }

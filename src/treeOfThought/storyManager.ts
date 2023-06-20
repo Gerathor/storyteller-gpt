@@ -1,47 +1,51 @@
-// storyManager.js
-
-import { OpenAI } from 'langchain';
 import { StoryNode, StoryNodeType } from './storyTree.js';
 import { SceneEvaluator } from '../evaluators-DEPRECATED/sceneEvaluator.js';
+import { BaseLLM } from 'langchain/llms';
+import { rewriteScene } from './storyWriterHelpers.js';
+import { colorizeLog } from '../stringManipulators.js';
 
 const MIN_INTERACTION_PER_SCENE = 3;
 
-interface Bookmark {
+export interface Bookmark {
   currentStage: number;
   currentCampaign: number;
   currentScene: number;
-  currentInteractionCount: number;
+}
+
+interface StoryManagerConfig {
+  storySkeleton: StoryNode;
+  highestLevel: StoryNodeType;
+  model: BaseLLM;
 }
 
 export class StoryManager {
   private storySkeleton: StoryNode;
   private highestStoryLevel: StoryNodeType;
   private bookmark: Bookmark;
+  private currentInteractionCount: number;
   private evaluator: SceneEvaluator;
+  private model: BaseLLM;
+  private currentSceneText = '';
   private optionalNextScene = () => {
-    if (this.bookmark.currentInteractionCount > MIN_INTERACTION_PER_SCENE) {
+    if (this.currentInteractionCount > MIN_INTERACTION_PER_SCENE) {
       return `Next scene: ${this.getNextScene().shortSummary}`;
     }
+    return '';
   };
 
-  constructor(
-    storySkeleton: StoryNode,
-    highestLevel: StoryNodeType = StoryNodeType.Stage
-  ) {
+  constructor(config: StoryManagerConfig) {
+    const { storySkeleton, highestLevel, model } = config;
     this.highestStoryLevel = highestLevel;
     this.bookmark = {
       currentStage: 0,
       currentCampaign: 0,
-      currentScene: 0,
-      currentInteractionCount: 0
+      currentScene: 0
     };
+    this.currentInteractionCount = 0;
     this.storySkeleton = storySkeleton;
-    this.validateStorySkeleton(highestLevel);
-    this.evaluator = new SceneEvaluator(
-      new OpenAI({
-        openAIApiKey: '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'
-      })
-    );
+    this.validateStorySkeleton(this.highestStoryLevel);
+    this.model = model;
+    this.evaluator = new SceneEvaluator(this.model);
   }
 
   validateStorySkeleton(highestStoryLevel: StoryNodeType) {
@@ -79,11 +83,18 @@ export class StoryManager {
     const currentCampaign = this.getCurrentCampaign();
     const currentScene = this.getCurrentScene();
 
-    return `STORY SKELETON:
+    const optionalNextScene = this.optionalNextScene();
+    const storyTemplate = `STORY SKELETON:
 Short synopsis of the whole story: ${this.storySkeleton.shortSummary}
 Current Campaign: ${currentCampaign.shortSummary}
 Current Scene: ${currentScene.shortSummary}
-${this.optionalNextScene()}`;
+${optionalNextScene}`;
+    console.log(
+      colorizeLog(
+        `####CurrentScene: ${currentScene.shortSummary}\n${optionalNextScene}#####`
+      )
+    );
+    return storyTemplate;
   }
 
   getCurrentStageTemplate() {
@@ -122,44 +133,62 @@ ${this.optionalNextScene()}`;
     this.getCurrentCampaign().children[this.bookmark.currentScene + 1];
 
   async evaluateAndPossiblyMoveToNextScene(lastMessages: string) {
-    this.bookmark.currentInteractionCount++;
-    if (this.bookmark.currentInteractionCount <= MIN_INTERACTION_PER_SCENE)
-      return false;
-    this.bookmark.currentInteractionCount = 0;
+    this.currentInteractionCount++;
+    if (this.currentInteractionCount <= MIN_INTERACTION_PER_SCENE) return false;
     const currentScene = this.getCurrentScene();
     const nextScene = this.getNextScene();
 
-    const evaluation = await this.evaluator.evaluateObjective(
-      lastMessages,
-      currentScene.shortSummary,
-      nextScene ? nextScene.shortSummary : ''
-    );
+    // ToDo - find out when and how one should be moved to the next scene...
+    // const evaluation = await this.evaluator.evaluateObjective(
+    //   lastMessages,
+    //   currentScene.shortSummary,
+    //   nextScene ? nextScene.shortSummary : ''
+    // );
 
-    if (evaluation.toLowerCase().includes('yes')) {
-      this.advanceToNextScene();
-      return true; // scene has ended
-    }
-    return false; // scene has not ended
+    // if (evaluation.toLowerCase().includes('yes')) {
+    this.advanceToNextScene();
+    this.currentInteractionCount = 0;
+    return true; // scene has ended
+    // }
+    // return false; // scene has not ended
   }
 
-  advanceToNextScene() {
-    // TODO:  might want to rewrite the next scene at this point
+  public appendToCurrentSceneText(text: string) {
+    this.currentSceneText += text;
+  }
+
+  async advanceToNextScene() {
     const currentStage = this.getCurrentStage();
     const currentCampaign = this.getCurrentCampaign();
 
+    this.getCurrentScene().shortSummary = await rewriteScene(
+      currentCampaign.shortSummary,
+      this.currentSceneText,
+      this.model
+    );
+
+    this.currentSceneText = '';
+
     if (this.bookmark.currentScene + 1 >= currentCampaign.children.length) {
-      // Current campaign ended. Move to next campaign
-      if (this.bookmark.currentCampaign + 1 >= currentStage.children.length) {
-        // Current stage ended. Move to next stage
-        this.bookmark.currentStage++;
-        this.bookmark.currentCampaign = 0;
-      } else {
-        this.bookmark.currentCampaign++;
-      }
-      this.bookmark.currentScene = 0;
+      this.handleNextCampaign(currentStage);
     } else {
       this.bookmark.currentScene++;
     }
+
     this.getCurrentScene().hasTranspired = true;
+  }
+
+  handleNextCampaign(currentStage: StoryNode) {
+    if (this.bookmark.currentCampaign + 1 >= currentStage.children.length) {
+      this.handleNextStage();
+    } else {
+      this.bookmark.currentCampaign++;
+    }
+    this.bookmark.currentScene = 0;
+  }
+
+  handleNextStage() {
+    this.bookmark.currentStage++;
+    this.bookmark.currentCampaign = 0;
   }
 }

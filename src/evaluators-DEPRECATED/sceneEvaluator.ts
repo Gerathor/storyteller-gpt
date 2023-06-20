@@ -1,8 +1,8 @@
 import { BaseLLM } from 'langchain/llms';
-import { STORY_STRUCTURE } from '../streamingConsoleInterface.js';
+import { STORY_STRUCTURE } from '../treeOfThought/storyTree.js';
 const DUNGEON_MASTER_EVALUATOR = `You are the AI assistant to a storyteller. You will see the dialog between the player and the storyteller.
 Your task is to evaluate the progression of the story so far and determine if it is appropriate to move on to the next scene now.
-Scenes should not be too long and too repetitive, but also not too short and too abrupt.`; // Todo: do the 3-4 interactions manually?
+Scenes should not be too long and too repetitive, but also not too short and too abrupt.`;
 // The main class that performs the objective evaluation
 export class SceneEvaluator {
   private model: BaseLLM;

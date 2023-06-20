@@ -34,3 +34,11 @@ export function truncateOutputAtStoppingString(
   }
   return truncatedOutput.trim();
 }
+
+export function removeTripleQuotes(str: string): string {
+  if (str.startsWith('"""') && str.endsWith('"""')) {
+    return str.slice(3, -3);
+  } else {
+    return str;
+  }
+}

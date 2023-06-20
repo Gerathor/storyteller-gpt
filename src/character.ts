@@ -10,7 +10,10 @@ export class Character {
   }
 
   async createPrompt(storySoFar: string): Promise<string | undefined> {
-    const instructions = `You are a character in a tabletop RPG-style game. Your task is to propose your next action based on your description and the storyline. Speak in first person, keep your actions concise, and respond based on what has been mentioned in the story. Assume your action's success is undetermined until the storyteller decides.`;
+    const instructions = `Based on your character's description and the given storyline, propose your next action in the third person. 
+Consider your character's personality, background, and current situation when deciding what to do.
+Your character's dialogue should reflect their personality, and their decisions should align with their character traits.
+Remember, the success of your proposed action is not yet determined and will be decided by the storyteller. Keep your actions short, ideally one or two sentences max.`;
 
     const fullPrompt = `Character Description: "${this.description}".
     THE STORY SO FAR: ${storySoFar}
@@ -19,7 +22,7 @@ export class Character {
 
     try {
       const response = await this.localLLM.call(fullPrompt);
-      console.log(response);
+      console.log(`AI character: ${response}`);
       return response;
     } catch (error) {
       console.error('Error generating prompt:', error);

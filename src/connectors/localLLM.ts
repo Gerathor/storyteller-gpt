@@ -4,18 +4,21 @@ import { Generation, LLMResult } from 'langchain/schema';
 
 interface TextGenerationWebUIOptions extends BaseLLMParams {
   url?: string;
+  maxTokens?: number;
 }
 export class MyLocalAI extends BaseLLM {
   url;
+  maxTokens;
   constructor(options: TextGenerationWebUIOptions) {
     super(options);
     this.url = options.url || 'http://localhost:5000/api/v1/generate';
+    this.maxTokens = options.maxTokens || 500;
   }
 
   async call(prompt: string): Promise<string> {
     const data = {
       prompt: prompt,
-      max_new_tokens: 500,
+      max_new_tokens: this.maxTokens,
       do_sample: true,
       temperature: 1.3,
       top_p: 0.1,
