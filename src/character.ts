@@ -1,4 +1,5 @@
 import { BaseLLM } from 'langchain/llms';
+import { colorizeLog } from './stringManipulators.js';
 
 export class Character {
   private localLLM: BaseLLM;
@@ -21,8 +22,13 @@ Remember, the success of your proposed action is not yet determined and will be 
     Proposed action:`;
 
     try {
+      console.log(colorizeLog('\nAI character: Thinking about next action...'));
+      const storySoFarIsComplete = storySoFar.trimEnd().endsWith('.');
+      if (!storySoFarIsComplete) {
+        return 'continue';
+      }
       const response = await this.localLLM.call(fullPrompt);
-      console.log(`AI character: ${response}`);
+      console.log(`\nAI character: ${response}`);
       return response;
     } catch (error) {
       console.error('Error generating prompt:', error);

@@ -42,7 +42,7 @@ async function consoleInterfaceDemo() {
 
   const pennyMcFixit = new Character(
     `Penny McFixit serves as the Chief Engineer aboard the "Pilgrimage," a colony ship traversing the cosmos. A devout Christian, Penny views her role as a divine mission, maintaining the ship's operations with an unwavering faith in God and a vivacious spirit. Known for her infectious optimism and wit, she's the heart of the crew. Her quick quips and cheerful demeanor bring light to the most grueling tasks, making her a popular figure among her team. However, her bright outlook can be a double-edged sword. Penny's tendency to downplay potential risks often leads to underestimated problems. Additionally, her high expectations set her up for disappointment, especially in personal relationships. Regardless, her technical expertise and faith-driven dedication make her a cornerstone in the Pilgrimage's journey through space.`,
-    llm
+    new MyLocalAI({ url: 'http://localhost:5000/api/v1/generate' })
   );
   // Create a new ConsoleInterface instance with the memory manager and AI facade
   const consoleInterface = new StreamingConsoleInterface({

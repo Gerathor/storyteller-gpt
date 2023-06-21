@@ -160,8 +160,8 @@ ${optionalNextScene}`;
   async advanceToNextScene() {
     const currentStage = this.getCurrentStage();
     const currentCampaign = this.getCurrentCampaign();
-
-    this.getCurrentScene().shortSummary = await rewriteScene(
+    const currentScene = this.getCurrentScene();
+    currentScene.shortSummary = await rewriteScene(
       currentCampaign.shortSummary,
       this.currentSceneText,
       this.model
@@ -175,7 +175,7 @@ ${optionalNextScene}`;
       this.bookmark.currentScene++;
     }
 
-    this.getCurrentScene().hasTranspired = true;
+    currentScene.hasTranspired = true;
   }
 
   handleNextCampaign(currentStage: StoryNode) {

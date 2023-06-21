@@ -9,7 +9,7 @@ import {
 } from './treeOfThought/storyTree.js';
 import { StoryManager } from './treeOfThought/storyManager.js';
 import { Character } from './character.js';
-import { colorizeLog } from './stringManipulators.js';
+import { colorizeLog, lastSentenceFromPlayer } from './stringManipulators.js';
 
 const DUNGEON_MASTER = `
 You are an AI storyteller. Your task is to create vivid, detailed, and dramatic descriptions of the actions taken by the characters,
@@ -73,6 +73,7 @@ ${STORY_STRUCTURE}`,
       output: process.stdout
     });
     this.aiCharacterOverride = aiCharacterOverride;
+    this.llm.events.on('incomingTextStream', this.incomingTextStreamHandler);
     console.log('And so the story begins...\n');
   }
 
@@ -142,9 +143,8 @@ ${STORY_STRUCTURE}`,
 
   private async handleInput(input: string): Promise<void> {
     // Query the memory for similar items
-    const memoryContext = await this.memory.loadMemoryVariables({
-      text: input
-    });
+    let memoryQuery = input;
+    let memoryContext;
 
     let lastMessages = this.getInPromptMemoryAsRawText();
 
@@ -153,29 +153,32 @@ ${STORY_STRUCTURE}`,
     if (input.toLowerCase() === 'continue') {
       promptEnding = '';
       lastMessages = lastMessages.trimEnd();
+      memoryQuery = lastSentenceFromPlayer(lastMessages, this.humanPrefix);
     }
+    if (memoryQuery) {
+      memoryContext = await this.memory.loadMemoryVariables({
+        text: memoryQuery
+      });
+    }
+
     const prompt = `${this.template}
 ${this.storyManager.getCurrentStoryTemplate()}
 You're a highly imaginative and detail-oriented storyteller, tasked with weaving a compelling narrative. Think of this like creating a unique movie - there's no need to adhere strictly to the script. Use the provided story skeleton as a loose guide, but feel free to diverge where you see fit, adding rich dialogue, intricate descriptions, and escalating tension.
 Remember to keep the character's emotions, environment, and underlying sense of unease in mind. Here are some recent events and details to consider:\n${
-      memoryContext.texts
+      memoryContext?.texts
     }
-And so far...\n${lastMessages}
-Imagine the next scene: How does it unfold? Focus on adding color and depth to the narrative, crafting a vivid setting, and revealing character complexity. Don't rush to the action. Instead, allow the tension and drama to unfold naturally. Remember, the skeleton is your guide, not your rulebook:
+Imagine the next scene: How does it unfold? Focus on adding color and depth to the narrative, crafting a vivid setting, and revealing character complexity. Don't rush to the action. Instead, allow the tension and drama to unfold naturally. Remember, the skeleton is your guide, not your rulebook.
+This is what has happened so far...\n${lastMessages}
 ${promptEnding}`;
 
     // Answer the question, along with the memory recall
+    while (!this.incomingTextStream) {
+      await this.llm.call(prompt);
+      if (!this.incomingTextStream) {
+        console.log(colorizeLog('No response from AI, retrying...'));
+      }
+    }
 
-    this.llm.events.on('incomingTextStream', this.incomingTextStreamHandler);
-    this.llm.events.on('end', this.endHandler);
-    await this.llm.call(prompt);
-    // Remove the event listeners to stop listening
-    this.llm.events.removeListener(
-      'incomingTextStream',
-      this.incomingTextStreamHandler
-    );
-    this.llm.events.removeListener('end', this.endHandler);
-    // console.log(this.incomingTextStream);
     this.inPromptMemory.push({
       human: `${this.humanPrefix}${input}`,
       ai: `${this.aiPrefix}${this.incomingTextStream}`

@@ -2,7 +2,14 @@ import WebSocket from 'ws';
 import { BaseLLM, BaseLLMParams } from 'langchain/llms';
 import { Generation } from 'langchain/schema';
 import EventEmitter from 'events';
+import { colorizeLog } from '../stringManipulators.js';
 
+const SHOW_DEBUG = true;
+const optionalLog = (log: string): void => {
+  if (SHOW_DEBUG) {
+    console.log(colorizeLog(log));
+  }
+};
 interface TextGenerationWebUIOptions extends BaseLLMParams {
   uri?: string;
 }
@@ -27,12 +34,114 @@ export class MyLocalAIStream extends BaseLLM {
   constructor(options: TextGenerationWebUIOptions) {
     super(options);
     this.uri = options.uri || 'ws://localhost:5005/api/v1/stream';
+    this.createSocket().catch((error) => {
+      console.error(`Error creating socket: ${error}`);
+    });
+  }
+
+  async createSocket(): Promise<void> {
+    this.socket = new WebSocket(this.uri);
+
+    this.socket.on('message', (message: Buffer) => {
+      const incomingData = JSON.parse(message.toString());
+      switch (incomingData['event']) {
+        case 'text_stream': {
+          const incomingText = incomingData['text'];
+          this.buffer += incomingText;
+          if (areOverlapping(this.buffer.trim(), this.endingString)) {
+            if (this.buffer.toLowerCase() === this.endingString.toLowerCase()) {
+              this.events.emit('end');
+              this.incomingStream = '';
+              this.buffer = '';
+            }
+          } else {
+            // If the buffer does not contain the ending string, emit the whole buffer and clear it
+            this.events.emit('incomingTextStream', this.buffer);
+            this.incomingStream += this.buffer;
+            this.buffer = '';
+          }
+          break;
+        }
+
+        case 'stream_end': {
+          this.events.emit('end');
+          this.incomingStream = '';
+          this.buffer = '';
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    this.socket.on('close', (code: number, reason: string) => {
+      if (code !== 1000) {
+        console.error(
+          `Websocket closed with code ${code} and reason ${reason}`
+        );
+      }
+    });
+  }
+
+  sendDataWhenOpen(
+    data: object,
+    resolve: (value: string | PromiseLike<string>) => void,
+    reject: (reason?: any) => void
+  ) {
+    if (!this.socket) {
+      reject('No socket');
+      return;
+    }
+
+    optionalLog('>>>>>>>>>>>>>>>> SENDING DATA <<<<<<<<<<<<<<<<');
+    this.socket.send(JSON.stringify(data));
+  }
+
+  sendData(
+    data: object,
+    resolve: (value: string | PromiseLike<string>) => void,
+    reject: (reason?: any) => void
+  ) {
+    if (!this.socket) {
+      reject('No socket');
+      return;
+    }
+
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.sendDataWhenOpen(data, resolve, reject);
+    } else {
+      this.socket.once('open', () =>
+        this.sendDataWhenOpen(data, resolve, reject)
+      );
+    }
+  }
+  waitForResponse(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const handleError = (error: unknown) => {
+        console.log('Error occurred: ', error);
+        reject(error);
+        this.events.off('error', handleError); // remove this listener
+      };
+
+      const handleEnd = () => {
+        // This event is emitted when the socket receives a 'stream_end' message
+        // or when the ending string is detected in the buffer
+        const fullString = this.incomingStream;
+        this.incomingStream = '';
+        this.buffer = '';
+        resolve(fullString);
+        this.events.off('error', handleError); // remove error listener
+      };
+
+      this.events.once('end', handleEnd);
+      this.events.on('error', handleError);
+    });
   }
 
   async call(prompt: string): Promise<string> {
     const data = {
       prompt: prompt,
-      max_new_tokens: 200,
+      max_new_tokens: 150,
       do_sample: true,
       temperature: 1.3,
       top_p: 0.1,
@@ -61,67 +170,26 @@ export class MyLocalAIStream extends BaseLLM {
     };
 
     return new Promise((resolve, reject) => {
-      this.socket = new WebSocket(this.uri);
-
-      this.socket.on('open', () => {
-        this.socket?.send(JSON.stringify(data));
-      });
-
-      this.socket.on('message', (message: Buffer) => {
-        const incomingData = JSON.parse(message.toString());
-        switch (incomingData['event']) {
-          case 'text_stream': {
-            const incomingText = incomingData['text'];
-            this.buffer += incomingText; // Add incoming text to buffer
-            if (areOverlapping(this.buffer.trim(), this.endingString)) {
-              if (
-                this.buffer.toLowerCase() === this.endingString.toLowerCase()
-              ) {
-                // Todo: end connection because the ending string is detected
-                this.socket?.close();
-                const fullString = this.incomingStream;
-                this.incomingStream = '';
-                this.buffer = '';
-                // this.events.removeAllListeners(); // Remove all previous listeners
-                resolve(fullString);
-                break;
-              } else break;
-            } else {
-              // If the buffer does not contain the ending string, emit the whole buffer and clear it
-              this.events.emit('incomingTextStream', this.buffer);
-              this.incomingStream += this.buffer;
-              this.buffer = '';
-            }
-
-            break;
-          }
-
-          case 'stream_end': {
-            this.events.emit('end'); // Emit an end event when the stream ends
-            this.socket?.close();
-            const fullString = this.incomingStream; // Do not include the buffer in the final string
-            this.incomingStream = '';
-            this.buffer = '';
-            resolve(fullString); // Resolve the promise when the stream ends
-            break;
-          }
-          default:
-            break;
-        }
-      });
-
-      this.socket.on('error', (error: Error) => {
-        reject(error);
-      });
-
-      this.socket.on('close', (code: number, reason: string) => {
-        if (code !== 1000) {
-          reject(
-            new Error(`Websocket closed with code ${code} and reason ${reason}`)
-          );
-        }
-      });
+      if (!(this.socket && this.socket.readyState === WebSocket.OPEN)) {
+        this.socket?.once('open', () => {
+          this.sendDataWhenOpen(data, resolve, reject);
+          this.waitForResponse().then(resolve).catch(reject);
+        });
+      } else {
+        // the socket is already connected, we can proceed
+        this.sendDataWhenOpen(data, resolve, reject);
+        this.waitForResponse().then(resolve).catch(reject);
+      }
     });
+  }
+
+  cleanup() {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.removeAllListeners();
+      this.socket.close();
+    }
+    this.incomingStream = '';
+    this.buffer = '';
   }
 
   async _generate(prompts: string[]): Promise<{

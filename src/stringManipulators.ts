@@ -42,3 +42,24 @@ export function removeTripleQuotes(str: string): string {
     return str;
   }
 }
+
+export function lastSentenceFromPlayer(
+  lastMessages: string,
+  playerSeparatorString: string
+) {
+  const messages = lastMessages.split(playerSeparatorString);
+  const playerMessages = messages.filter((message) =>
+    message.includes('Player:')
+  );
+
+  if (playerMessages.length > 0) {
+    const lastPlayerMessage = playerMessages[playerMessages.length - 1];
+    const startIndex = lastPlayerMessage.lastIndexOf('Player:');
+    if (startIndex !== -1) {
+      return lastPlayerMessage.slice(startIndex).trim();
+    }
+  }
+
+  // Return an empty string if no player message found or the player message doesn't have content
+  return '';
+}
